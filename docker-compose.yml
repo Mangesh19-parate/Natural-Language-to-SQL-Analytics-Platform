@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres-metadata:
+    image: postgres:16-alpine
+    container_name: sql_assistant_postgres_metadata
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: sql_assistant_metadata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_metadata_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sql_assistant_metadata"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-business:
+    image: postgres:16-alpine
+    container_name: sql_assistant_postgres_business
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: sql_assistant_business
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_business_data:/var/lib/postgresql/data
+      - ./backend/scripts/init_postgres_roles.sql:/docker-entrypoint-initdb.d/init_postgres_roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sql_assistant_business"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sql_assistant_backend
+    environment:
+      - ENVIRONMENT=local
+      - METADATA_DB_URL=postgresql://postgres:postgrespassword@postgres-metadata:5432/sql_assistant_metadata
+      - BUSINESS_DB_URL=postgresql://readonly_app_user:readonly_secret_pass@postgres-business:5432/sql_assistant_business
+      - BUSINESS_ADMIN_DB_URL=postgresql://postgres:postgrespassword@postgres-business:5432/sql_assistant_business
+      - JWT_SECRET_KEY=dev-secret-key-32-chars-long-minimum-jwt
+      - LLM_PROVIDER=mock
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres-metadata:
+        condition: service_healthy
+      postgres-business:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sql_assistant_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pg_metadata_data:
+  pg_business_data:

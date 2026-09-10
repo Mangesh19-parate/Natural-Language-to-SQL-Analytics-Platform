@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelligent-sql-assistant"
+version = "1.2.0"
+description = "A Trustworthy Natural-Language Analytics Engine with Verification, Self-Correction and Evidence-Grounded Query Execution"
+authors = [{ name = "Antigravity Engineering" }]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13.0",
+    "psycopg2-binary>=2.9.9",
+    "asyncpg>=0.29.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.1.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "reportlab>=4.2.0",
+    "openpyxl>=3.1.0",
+    "faker>=25.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
