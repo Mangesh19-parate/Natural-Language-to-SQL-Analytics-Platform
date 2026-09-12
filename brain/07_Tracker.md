@@ -32,8 +32,8 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-21 | Row-filter injection | REQ-AUTH-03 | T-17 | `data_policy.row_filter_sql` applied automatically, unremovable by the LLM's proposed SQL | 5 | P0 (critical) | test_row_filter_injection.py | Done |
 | T-22 | Read-only DB role + timeout/row-limit sandbox | REQ-SAFE-04 | T-01 | Write attempt at engine level fails even if application-layer check somehow passed | 5 | P0 | test_resource_limits.py::test_execution_sandbox_row_cap | Done |
 | T-23 | Full Policy Engine test suite (seeds Attack Lab) | REQ-SAFE-05 | T-15..T-22 | ≥40 adversarial cases, 100% blocked | 5 | P0 (critical) | test_full_policy_suite.py (45/45 blocked, 100%) | Done |
-| T-24 | SQL Critic rule set | REQ-CRITIC-01 | T-23 | Flags `SUM(order_id)`-class smells in a 20-case test set at ≥85% precision | 6 | P0 | eval_category=semantic_smell | Not Started |
-| T-25 | Critic UI (warning + suggested fix) | REQ-CRITIC-01 | T-24 | User can proceed/revise from the warning | 6 | P0 | usability test | Not Started |
+| T-24 | SQL Critic rule set | REQ-CRITIC-01 | T-23 | Flags `SUM(order_id)`-class smells in a 20-case test set at ≥85% precision | 6 | P0 | test_sql_critic.py (20-case semantic smell test set, 100% catch rate) | Done |
+| T-25 | Critic UI (warning + suggested fix) | REQ-CRITIC-01 | T-24 | User can proceed/revise from the warning | 6 | P0 | SQLCriticCard.jsx + test_critic_api.py (persistence & 3-action UX) | Done |
 | T-26 | Self-correction loop + E1–E7 taxonomy | REQ-CORR-01/02 | T-23 | Each error class individually reproducible via seeded failing queries | 7 | P0 | test_self_correction.py (per class) | Not Started |
 | T-27 | E5 routing (auth errors never retried) | REQ-CORR-02 | T-26 | An authorization failure never triggers a regeneration attempt | 7 | P0 (critical) | test_self_correction.py::test_e5_no_retry | Not Started |
 | T-28 | Result Validator | REQ-RESULT-01 | T-22 | Zero-row/cardinality/join-multiplication/NULL cases each individually detected | 7 | P0 | test_result_validator.py | Not Started |

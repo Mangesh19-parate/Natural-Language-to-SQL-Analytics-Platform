@@ -118,9 +118,9 @@ export default function App() {
             <span className="logo-dot"></span>
             <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
-          <h1 className="title">Week 5: Policy Engine Complete &amp; Resource Limits</h1>
+          <h1 className="title">Week 6: SQL Critic Semantic-Smell Engine &amp; Advisory UI</h1>
           <p className="subtitle">
-            Function allowlists &bull; Cartesian join guards &bull; Row-filter injection &bull; Read-only sandbox with timeout &amp; row cap
+            AST-level semantic analysis &bull; Identifier aggregation guards &bull; Actionable suggested fixes &bull; Advisory findings persistence
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -150,7 +150,7 @@ export default function App() {
               Phase 1 &bull; P0 Critical Gate
             </span>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Week 5 / Day 35 Gate
+              Week 6 / Day 42 Gate
             </div>
           </div>
         </div>
@@ -163,20 +163,20 @@ export default function App() {
             <span className="status-indicator"></span>
             <span>Deterministic Trust &amp; Safety Boundary</span>
           </div>
-          <span className="badge badge-done">Weeks 4-5 Complete Gate</span>
+          <span className="badge badge-done">Weeks 1-6 Complete Gate</span>
         </div>
         <div className="stats-grid">
           <div className="stat-row">
-            <span className="stat-label">Function Allowlist (T-19)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (R1.3)</span>
+            <span className="stat-label">Policy Engine (T-15..T-23)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (100% Block Rate)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Cartesian Guard (T-20)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (R1.5)</span>
+            <span className="stat-label">SQL Critic Engine (T-24)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (&ge;85% Smell Catch)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Row-Filter Injection (T-21)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Automatic AST Injection</span>
+            <span className="stat-label">Critic UI Actions (T-25)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Advisory Card (R3.1)</span>
           </div>
           <div className="stat-row">
             <span className="stat-label">Execution Sandbox (T-22)</span>
@@ -351,12 +351,17 @@ export default function App() {
       <div className="card" style={{ marginTop: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Automated Test Verification Matrix (Weeks 1 through 5 Complete Suite)</span>
+            <span>Automated Test Verification Matrix (Weeks 1 through 6 Complete Suite)</span>
           </div>
-          <span className="badge badge-done">45 / 45 Passing (100%)</span>
+          <span className="badge badge-done">50 / 50 Passing (100%)</span>
         </div>
         <div className="code-box">
-{`tests/unit/test_full_policy_suite.py::test_full_policy_engine_blocks_100_percent_attacks [PASSED] (T-23 45+ Attack Suite 100% Blocked)
+{`tests/unit/test_sql_critic.py::test_sql_critic_catch_rate_on_20_smells               [PASSED] (T-24 >=85% Benchmark Catch Rate)
+tests/unit/test_sql_critic.py::test_sql_critic_zero_false_positives_on_legitimate_queries [PASSED] (T-24 0% False Positive Guarantee)
+tests/unit/test_sql_critic.py::test_suggested_sql_generation                         [PASSED] (T-24 Suggested SQL AST Rewriter)
+tests/integration/test_critic_api.py::test_api_critic_endpoint                       [PASSED] (T-25 POST /api/sql/critic API)
+tests/integration/test_critic_api.py::test_sql_critic_findings_persistence          [PASSED] (T-25 sql_critic_findings DB Persistence)
+tests/unit/test_full_policy_suite.py::test_full_policy_engine_blocks_100_percent_attacks [PASSED] (T-23 45+ Attack Suite 100% Blocked)
 tests/unit/test_function_allowlist.py::test_disallowed_functions_detected              [PASSED] (T-19 Side-Channel / Sleep Block R1.3)
 tests/unit/test_function_allowlist.py::test_safe_functions_permitted                  [PASSED] (T-19 Safe Analytical Functions)
 tests/unit/test_function_allowlist.py::test_policy_engine_rejects_disallowed_functions [PASSED] (T-19 Policy Engine Rejection)

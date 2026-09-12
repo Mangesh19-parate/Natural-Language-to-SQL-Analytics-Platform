@@ -7,6 +7,7 @@ from app.services.semantic_catalog_service import SemanticCatalogService
 from app.services.prompt_builder import CatalogPromptBuilder
 from app.services.llm_provider import LLMProviderService
 from app.services.policy_engine import PolicyEngine
+from app.services.sql_critic import SQLCriticService
 
 
 class SQLGeneratorService:
@@ -17,8 +18,8 @@ class SQLGeneratorService:
     "The LLM proposes. Deterministic infrastructure authorizes, critiques, executes, and verifies."
     
     Generates a candidate SQL proposal via the LLM provider using exclusively the
-    policy-filtered Semantic Catalog, then immediately passes the proposal through
-    the deterministic Policy Enforcement Engine.
+    policy-filtered Semantic Catalog, passes the proposal through the deterministic
+    Policy Enforcement Engine, and evaluates semantic smells with the SQL Critic.
     """
 
     def __init__(self, llm_provider: Optional[LLMProviderService] = None):
@@ -28,12 +29,10 @@ class SQLGeneratorService:
     def _extract_json(text: str) -> Dict[str, Any]:
         """Safely extracts JSON object from LLM output string or markdown block."""
         text = text.strip()
-        # Look for markdown json code block
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if match:
             text = match.group(1)
         else:
-            # Look for outermost braces
             match = re.search(r"(\{.*\})", text, re.DOTALL)
             if match:
                 text = match.group(1)
@@ -59,6 +58,7 @@ class SQLGeneratorService:
         2. Builds prompt.
         3. Invokes LLM.
         4. Validates proposed SQL against deterministic Policy Engine.
+        5. Evaluates semantic smells with SQL Critic.
         """
         # Step 1: Policy-filtered catalog
         catalog = SemanticCatalogService.get_catalog_for_role(db, data_source_id=data_source_id, role_id=role_id)
@@ -82,7 +82,7 @@ class SQLGeneratorService:
             is_proposal=True
         )
 
-        # Step 4: Deterministic Policy Validation Gate (T-15, T-16, T-17, T-18)
+        # Step 4: Deterministic Policy Validation Gate (Weeks 4-5)
         policy_result = PolicyEngine.validate_sql(
             db=db,
             role_id=role_id,
@@ -90,12 +90,22 @@ class SQLGeneratorService:
             sql=proposed_sql
         )
 
+        # Step 5: SQL Critic Semantic-Smell Analysis (Week 6 / Task T-24 / Rule R3.1)
+        critic_analysis = None
+        if policy_result.is_allowed:
+            critic_analysis = SQLCriticService.critique_sql(
+                db=db,
+                data_source_id=data_source_id,
+                sql=policy_result.injected_sql or proposed_sql,
+            )
+
         rejection_reasons = [v.message for v in policy_result.violations]
 
         return SQLGenerateResponse(
             question=question,
             proposal=proposal,
             policy_validation=policy_result,
+            critic_analysis=critic_analysis,
             can_execute=policy_result.is_allowed,
-            rejection_reasons=rejection_reasons
+            rejection_reasons=rejection_reasons,
         )

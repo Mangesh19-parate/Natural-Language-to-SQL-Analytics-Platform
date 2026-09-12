@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import SQLCriticCard from './SQLCriticCard.jsx';
 
 export default function SQLProposalCard({
   question,
@@ -9,6 +10,7 @@ export default function SQLProposalCard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [sqlProposalData, setSqlProposalData] = useState(null);
   const [error, setError] = useState(null);
+  const [activeSql, setActiveSql] = useState('');
 
   // Sandbox execution state
   const [isExecuting, setIsExecuting] = useState(false);
@@ -34,6 +36,7 @@ export default function SQLProposalCard({
       });
       const data = await res.json();
       setSqlProposalData(data);
+      setActiveSql(data.policy_validation?.injected_sql || data.proposal?.sql || '');
       if (onGenerateSuccess) {
         onGenerateSuccess(data);
       }
@@ -42,6 +45,10 @@ export default function SQLProposalCard({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleApplyFix = (suggestedSql) => {
+    setActiveSql(suggestedSql);
   };
 
   const handleExecute = async () => {
@@ -53,7 +60,7 @@ export default function SQLProposalCard({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sql: sqlProposalData.proposal.sql,
+          sql: activeSql || sqlProposalData.proposal.sql,
           role_id: roleId,
           data_source_id: 1,
           timeout_seconds: 10.0,
@@ -83,7 +90,7 @@ export default function SQLProposalCard({
         <div>
           <h4 style={{ margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
             <span>⚡</span>
-            <span>Weeks 4 &amp; 5: SQL Proposal &amp; Policy Enforcement Gate</span>
+            <span>Weeks 4–6: SQL Proposal &bull; Policy Gate &bull; SQL Critic</span>
           </h4>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Principle: <em>"The LLM proposes. Deterministic infrastructure authorizes, critiques, executes, and verifies."</em>
@@ -128,7 +135,7 @@ export default function SQLProposalCard({
               </span>
             </div>
             <pre style={{ margin: 0, color: '#38bdf8', fontFamily: 'monospace', fontSize: '0.88rem', overflowX: 'auto', padding: '0.5rem 0' }}>
-              {sqlProposalData.proposal?.sql}
+              {activeSql || sqlProposalData.proposal?.sql}
             </pre>
             {sqlProposalData.proposal?.rationale && (
               <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.5rem', borderTop: '1px solid #1e293b', paddingTop: '0.5rem' }}>
@@ -227,29 +234,39 @@ export default function SQLProposalCard({
                 </ul>
               </div>
             )}
-
-            {/* Execute Sandbox Button */}
-            {sqlProposalData.can_execute && (
-              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
-                <button
-                  onClick={handleExecute}
-                  disabled={isExecuting}
-                  style={{
-                    background: '#10b981',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '0.45rem 1rem',
-                    fontWeight: 600,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {isExecuting ? 'Executing in Sandbox...' : '▶ Execute in Read-Only Sandbox (T-22)'}
-                </button>
-              </div>
-            )}
           </div>
+
+          {/* SQL Critic Layer (Week 6 / Task T-24, T-25 / Rule R3.1) */}
+          {sqlProposalData.can_execute && (
+            <SQLCriticCard
+              criticAnalysis={sqlProposalData.critic_analysis}
+              onApplyFix={handleApplyFix}
+              onProceedAnyway={handleExecute}
+              onReviseQuestion={() => {}}
+            />
+          )}
+
+          {/* Execute Sandbox Button */}
+          {sqlProposalData.can_execute && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                onClick={handleExecute}
+                disabled={isExecuting}
+                style={{
+                  background: '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '0.5rem 1.25rem',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {isExecuting ? 'Executing in Sandbox...' : '▶ Execute in Read-Only Sandbox (T-22)'}
+              </button>
+            </div>
+          )}
 
           {/* Sandbox Execution Result Table */}
           {executionResult && (

@@ -6,6 +6,8 @@ from app.schemas.query import (
     SQLGenerateResponse,
     SQLValidateRequest,
     SQLValidateResponse,
+    SQLCriticRequest,
+    SQLCriticResponse,
     SQLExecuteRequest,
     SQLExecuteResponse,
 )
@@ -13,6 +15,7 @@ from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
 from app.services.execution_sandbox import ExecutionSandboxService
+from app.services.sql_critic import SQLCriticService
 
 router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
 
@@ -24,7 +27,8 @@ async def generate_sql_proposal(
 ):
     """
     Generates a SQL query proposal via LLM provider using the role's Semantic Catalog,
-    and subjects it to deterministic AST & Policy Engine validation (Principle R0).
+    and subjects it to deterministic AST & Policy Engine validation (Principle R0)
+    and SQL Critic semantic-smell analysis (Rule R3.1).
     """
     generator = SQLGeneratorService()
     response = await generator.generate_sql_proposal(
@@ -43,7 +47,8 @@ async def validate_sql(
     db: Session = Depends(get_db),
 ):
     """
-    Performs deterministic AST and Policy Engine authorization checks on any SQL statement.
+    Performs deterministic AST and Policy Engine authorization checks on any SQL statement,
+    including SQL Critic smell analysis.
     """
     analysis = SQLASTParser.analyze_sql(request.sql)
     policy_res = PolicyEngine.validate_sql(
@@ -52,10 +57,46 @@ async def validate_sql(
         data_source_id=request.data_source_id,
         sql=request.sql,
     )
+    critic_res = None
+    if policy_res.is_allowed:
+        critic_res = SQLCriticService.critique_sql(
+            db=db,
+            data_source_id=request.data_source_id,
+            sql=policy_res.injected_sql or request.sql,
+        )
+
     return SQLValidateResponse(
         sql=request.sql,
         policy_validation=policy_res,
+        critic_analysis=critic_res,
         analysis=analysis.model_dump(),
+    )
+
+
+@router.post("/critic", response_model=SQLCriticResponse)
+async def critique_sql_endpoint(
+    request: SQLCriticRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Evaluates semantic smells in an ad-hoc SQL query using the Semantic Catalog metadata.
+    """
+    critic_res = SQLCriticService.critique_sql(
+        db=db,
+        data_source_id=request.data_source_id,
+        sql=request.sql,
+    )
+
+    if request.query_id and critic_res.findings:
+        SQLCriticService.persist_findings(
+            db=db,
+            query_id=request.query_id,
+            findings=critic_res.findings,
+        )
+
+    return SQLCriticResponse(
+        sql=request.sql,
+        critic_analysis=critic_res,
     )
 
 
@@ -92,6 +133,12 @@ async def execute_sandboxed_sql(
     # Use injected SQL (with active row filters) for execution
     execution_sql = policy_res.injected_sql or request.sql
 
+    critic_res = SQLCriticService.critique_sql(
+        db=db,
+        data_source_id=request.data_source_id,
+        sql=execution_sql,
+    )
+
     sandbox_res = ExecutionSandboxService.execute_query(
         engine=business_engine,
         sql=execution_sql,
@@ -109,5 +156,6 @@ async def execute_sandboxed_sql(
         latency_ms=sandbox_res.latency_ms,
         truncated=sandbox_res.truncated,
         policy_validation=policy_res,
+        critic_analysis=critic_res,
         error=sandbox_res.error,
     )
