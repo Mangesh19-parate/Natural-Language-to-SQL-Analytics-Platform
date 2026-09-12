@@ -10,12 +10,17 @@ export default function SQLProposalCard({
   const [sqlProposalData, setSqlProposalData] = useState(null);
   const [error, setError] = useState(null);
 
+  // Sandbox execution state
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState(null);
+
   const targetQuestion = resolvedQuestion || question;
 
   const handleGenerate = async () => {
     if (!targetQuestion) return;
     setIsGenerating(true);
     setError(null);
+    setExecutionResult(null);
 
     try {
       const res = await fetch('/api/sql/generate', {
@@ -39,6 +44,31 @@ export default function SQLProposalCard({
     }
   };
 
+  const handleExecute = async () => {
+    if (!sqlProposalData?.can_execute) return;
+    setIsExecuting(true);
+
+    try {
+      const res = await fetch('/api/sql/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sql: sqlProposalData.proposal.sql,
+          role_id: roleId,
+          data_source_id: 1,
+          timeout_seconds: 10.0,
+          max_rows: 10000,
+        }),
+      });
+      const data = await res.json();
+      setExecutionResult(data);
+    } catch (err) {
+      setExecutionResult({ success: false, error: err.message });
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -53,7 +83,7 @@ export default function SQLProposalCard({
         <div>
           <h4 style={{ margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
             <span>⚡</span>
-            <span>Week 4: SQL Proposal &amp; Policy Engine Gate (T-14..T-18)</span>
+            <span>Weeks 4 &amp; 5: SQL Proposal &amp; Policy Enforcement Gate</span>
           </h4>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Principle: <em>"The LLM proposes. Deterministic infrastructure authorizes, critiques, executes, and verifies."</em>
@@ -107,7 +137,25 @@ export default function SQLProposalCard({
             )}
           </div>
 
-          {/* Deterministic Policy Engine Gate (T-15, T-16, T-17, T-18) */}
+          {/* Row Filter Injection (T-21) if applied */}
+          {sqlProposalData.policy_validation?.injected_sql &&
+            sqlProposalData.policy_validation.injected_sql !== sqlProposalData.proposal?.sql && (
+              <div style={{ background: '#081426', border: '1px solid #1d4ed8', borderRadius: '8px', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    🛡️ Injected Safe SQL (T-21 Row Filter Enforced)
+                  </span>
+                  <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', background: '#1e3a8a', color: '#bfdbfe', borderRadius: '4px' }}>
+                    Role Filter Active
+                  </span>
+                </div>
+                <pre style={{ margin: 0, color: '#60a5fa', fontFamily: 'monospace', fontSize: '0.88rem', overflowX: 'auto' }}>
+                  {sqlProposalData.policy_validation.injected_sql}
+                </pre>
+              </div>
+            )}
+
+          {/* Deterministic Policy Engine Gate (Weeks 4-5) */}
           <div
             style={{
               background: sqlProposalData.can_execute ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
@@ -139,20 +187,28 @@ export default function SQLProposalCard({
             </div>
 
             {/* Checks Checklist */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', margin: '0.75rem 0' }}>
-              <div style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', margin: '0.75rem 0' }}>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span>✓</span>
-                <span>AST SELECT-only (T-15)</span>
+                <span>SELECT-only AST (T-15)</span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span>✓</span>
-                <span>Deny-by-Default Tables (T-16)</span>
+                <span>Function Allowlist (T-19)</span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span>✓</span>
+                <span>Cartesian Guard (T-20)</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span>✓</span>
+                <span>Deny-by-Default (T-16)</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span>✓</span>
                 <span>Column Authorization (T-17)</span>
               </div>
-              <div style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span>✓</span>
                 <span>Aggregate Guard (T-18)</span>
               </div>
@@ -171,7 +227,71 @@ export default function SQLProposalCard({
                 </ul>
               </div>
             )}
+
+            {/* Execute Sandbox Button */}
+            {sqlProposalData.can_execute && (
+              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting}
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '0.45rem 1rem',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isExecuting ? 'Executing in Sandbox...' : '▶ Execute in Read-Only Sandbox (T-22)'}
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Sandbox Execution Result Table */}
+          {executionResult && (
+            <div style={{ background: '#0a0f1d', border: '1px solid #1e293b', borderRadius: '8px', padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: executionResult.success ? '#34d399' : '#f87171' }}>
+                  {executionResult.success ? '✅ Execution Successful' : '❌ Execution Error'}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Rows: {executionResult.row_count} &bull; Latency: {executionResult.latency_ms}ms
+                </span>
+              </div>
+
+              {executionResult.rows?.length > 0 && (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                        {executionResult.columns.map((c, i) => (
+                          <th key={i} style={{ padding: '0.4rem 0.6rem' }}>{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {executionResult.rows.slice(0, 10).map((r, ri) => (
+                        <tr key={ri} style={{ borderBottom: '1px solid #1e293b' }}>
+                          {executionResult.columns.map((c, ci) => (
+                            <td key={ci} style={{ padding: '0.4rem 0.6rem', color: '#e2e8f0' }}>{String(r[c])}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {executionResult.rows.length > 10 && (
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.5rem' }}>
+                      Showing first 10 of {executionResult.row_count} rows.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

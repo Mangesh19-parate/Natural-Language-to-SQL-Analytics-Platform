@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -11,7 +11,9 @@ class PolicyViolationType(str, Enum):
     UNAUTHORIZED_COLUMN = "UNAUTHORIZED_COLUMN"
     UNAUTHORIZED_AGGREGATE = "UNAUTHORIZED_AGGREGATE"
     DISALLOWED_FUNCTION = "DISALLOWED_FUNCTION"
+    CARTESIAN_PRODUCT_BLOCKED = "CARTESIAN_PRODUCT_BLOCKED"
     ROW_FILTER_REQUIRED = "ROW_FILTER_REQUIRED"
+    COST_LIMIT_EXCEEDED = "COST_LIMIT_EXCEEDED"
 
 
 class PolicyViolation(BaseModel):
@@ -32,6 +34,8 @@ class SQLAnalysisResult(BaseModel):
     # Map table_name -> list of (func_name, col_name)
     aggregates: List[Dict[str, str]] = Field(default_factory=list)
     functions: List[str] = Field(default_factory=list)
+    disallowed_functions: List[str] = Field(default_factory=list)
+    has_cartesian_join: bool = False
 
 
 class PolicyValidationResult(BaseModel):
@@ -40,6 +44,8 @@ class PolicyValidationResult(BaseModel):
     violations: List[PolicyViolation] = Field(default_factory=list)
     effective_tables: List[str] = Field(default_factory=list)
     applied_row_filters: Dict[str, str] = Field(default_factory=dict)
+    injected_sql: Optional[str] = None
+    estimated_cost: Optional[float] = None
 
 
 class DataPolicyCreate(BaseModel):

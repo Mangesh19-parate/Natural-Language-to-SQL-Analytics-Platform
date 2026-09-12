@@ -118,9 +118,9 @@ export default function App() {
             <span className="logo-dot"></span>
             <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
-          <h1 className="title">Week 4: SQL Generator &amp; Policy Enforcement Layer</h1>
+          <h1 className="title">Week 5: Policy Engine Complete &amp; Resource Limits</h1>
           <p className="subtitle">
-            Deterministic AST validation &bull; Schema authorization (deny-by-default) &bull; Column authorization &bull; Aggregate-function guard
+            Function allowlists &bull; Cartesian join guards &bull; Row-filter injection &bull; Read-only sandbox with timeout &amp; row cap
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -147,10 +147,10 @@ export default function App() {
 
           <div style={{ textAlign: 'right' }}>
             <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
-              Phase 1 &bull; P0 Critical
+              Phase 1 &bull; P0 Critical Gate
             </span>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Week 4 / Day 28 Gate
+              Week 5 / Day 35 Gate
             </div>
           </div>
         </div>
@@ -163,39 +163,39 @@ export default function App() {
             <span className="status-indicator"></span>
             <span>Deterministic Trust &amp; Safety Boundary</span>
           </div>
-          <span className="badge badge-done">Week 4 Operational</span>
+          <span className="badge badge-done">Weeks 4-5 Complete Gate</span>
         </div>
         <div className="stats-grid">
           <div className="stat-row">
-            <span className="stat-label">LLM Role</span>
-            <span className="stat-value" style={{ color: '#6366f1' }}>Proposal Generator Only</span>
+            <span className="stat-label">Function Allowlist (T-19)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (R1.3)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">AST Policy Engine</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>SELECT-Only Gate (T-15)</span>
+            <span className="stat-label">Cartesian Guard (T-20)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (R1.5)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Table Authorization</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Deny-by-Default (T-16)</span>
+            <span className="stat-label">Row-Filter Injection (T-21)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Automatic AST Injection</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Aggregate Function Guard</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (T-18 / R1.4)</span>
+            <span className="stat-label">Execution Sandbox (T-22)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Read-Only (10s / 10k cap)</span>
           </div>
         </div>
       </div>
 
-      {/* Week 3 & 4 Interactive Intent & SQL Studio */}
+      {/* Interactive Intent & SQL Studio */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Natural-Language Query &amp; SQL Proposal Studio (Weeks 3 &amp; 4)</span>
+            <span>Natural-Language Query &amp; Sandboxed SQL Proposal Studio</span>
           </div>
           <span className="badge badge-done">End-to-End Pipeline</span>
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Rule R2.1: Question is classified into <strong>Answerable / Ambiguous / Unsupported / Unauthorized</strong>, followed by LLM Proposal and deterministic AST authorization.
+          Rule R2.1: Question is classified into <strong>Answerable / Ambiguous / Unsupported / Unauthorized</strong>, followed by LLM Proposal, deterministic AST authorization, row-filter injection, and sandboxed execution.
         </p>
 
         {/* Sample Question Chips */}
@@ -332,7 +332,7 @@ export default function App() {
               />
             )}
 
-            {/* SQL Proposal & Policy Engine Gate (Week 4: T-14..T-18) */}
+            {/* SQL Proposal & Policy Engine Gate (Weeks 4-5) */}
             {(resolvedQuestion || intentResult.classification === 'answerable') && (
               <SQLProposalCard
                 question={queryInput}
@@ -347,16 +347,28 @@ export default function App() {
       {/* Adversarial SQL & AST Validator Sandbox */}
       <PolicyValidatorSandbox roleId={selectedRole} />
 
-      {/* Week 4 Automated Test Matrix */}
+      {/* Automated Test Verification Matrix */}
       <div className="card" style={{ marginTop: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Automated Test Verification Matrix (Weeks 1, 2, 3, 4 Complete Suite)</span>
+            <span>Automated Test Verification Matrix (Weeks 1 through 5 Complete Suite)</span>
           </div>
-          <span className="badge badge-done">33 / 33 Passing (100%)</span>
+          <span className="badge badge-done">45 / 45 Passing (100%)</span>
         </div>
         <div className="code-box">
-{`tests/unit/test_sql_validator.py::test_reject_100_percent_non_select_statements        [PASSED] (T-15 AST SELECT-only Gate 100%)
+{`tests/unit/test_full_policy_suite.py::test_full_policy_engine_blocks_100_percent_attacks [PASSED] (T-23 45+ Attack Suite 100% Blocked)
+tests/unit/test_function_allowlist.py::test_disallowed_functions_detected              [PASSED] (T-19 Side-Channel / Sleep Block R1.3)
+tests/unit/test_function_allowlist.py::test_safe_functions_permitted                  [PASSED] (T-19 Safe Analytical Functions)
+tests/unit/test_function_allowlist.py::test_policy_engine_rejects_disallowed_functions [PASSED] (T-19 Policy Engine Rejection)
+tests/unit/test_resource_limits.py::test_cartesian_product_detection                  [PASSED] (T-20 Cartesian Product Guard R1.5)
+tests/unit/test_resource_limits.py::test_policy_engine_rejects_cartesian_join         [PASSED] (T-20 Policy Engine Resource Limit)
+tests/unit/test_resource_limits.py::test_execution_sandbox_row_cap                     [PASSED] (T-22 Sandbox 10k Cap & Truncation)
+tests/unit/test_resource_limits.py::test_execution_sandbox_error_handling             [PASSED] (T-22 Sandbox Error Isolation)
+tests/unit/test_row_filter_injection.py::test_ast_row_filter_injection_simple         [PASSED] (T-21 AST Row-Filter Injection R1.2)
+tests/unit/test_row_filter_injection.py::test_ast_row_filter_injection_with_existing_where [PASSED] (T-21 WHERE Clause Conjunction)
+tests/unit/test_row_filter_injection.py::test_ast_row_filter_injection_with_alias   [PASSED] (T-21 Alias Column Qualification)
+tests/unit/test_row_filter_injection.py::test_policy_engine_applies_row_filter_automatically [PASSED] (T-21 Policy Engine Output)
+tests/unit/test_sql_validator.py::test_reject_100_percent_non_select_statements        [PASSED] (T-15 AST SELECT-only Gate 100%)
 tests/unit/test_sql_validator.py::test_accept_valid_select_statements                  [PASSED] (T-15 Analytical SELECTs)
 tests/unit/test_sql_validator.py::test_table_and_column_extraction                     [PASSED] (T-15 Table & Column Extraction)
 tests/unit/test_sql_validator.py::test_aggregate_function_detection                    [PASSED] (T-15 Aggregate Function AST Detection)

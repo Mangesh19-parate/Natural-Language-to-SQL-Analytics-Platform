@@ -27,11 +27,11 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-16 | Schema authorization (deny-by-default) | REQ-SAFE-02 | T-04, T-15 | A table with no `data_policy` row is rejected, not allowed | 4 | P0 (critical) | test_policy_enforcement.py::test_schema_deny | Done |
 | T-17 | Column authorization | REQ-SAFE-02 | T-16 | Per-column check independent of table-level check | 4 | P0 (critical) | test_policy_enforcement.py::test_column_deny | Done |
 | T-18 | Aggregate-function guard | REQ-AUTH-03 | T-17 | `AVG(salary)` rejected unless role has `aggregate_allowed=true` | 4 | P0 (critical) | test_policy_enforcement.py::test_aggregate_guard | Done |
-| T-19 | Function/operator allowlist | REQ-SAFE-02 | T-17 | `pg_sleep()`-class functions rejected regardless of statement validity | 5 | P0 (critical) | test_policy_enforcement.py::test_function_allowlist | Not Started |
-| T-20 | Resource/cost pre-check (EXPLAIN-based) | REQ-SAFE-03 | T-19 | Pathological Cartesian join rejected before execution | 5 | P0 (critical) | test_resource_limits.py | Not Started |
-| T-21 | Row-filter injection | REQ-AUTH-03 | T-17 | `data_policy.row_filter_sql` applied automatically, unremovable by the LLM's proposed SQL | 5 | P0 (critical) | test_row_filter_injection.py | Not Started |
-| T-22 | Read-only DB role + timeout/row-limit sandbox | REQ-SAFE-04 | T-01 | Write attempt at engine level fails even if application-layer check somehow passed | 5 | P0 | infra + test_sandbox.py | Not Started |
-| T-23 | Full Policy Engine test suite (seeds Attack Lab) | REQ-SAFE-05 | T-15..T-22 | ≥40 adversarial cases, 100% blocked | 5 | P0 (critical) | test_policy_enforcement.py (full) | Not Started |
+| T-19 | Function/operator allowlist | REQ-SAFE-02 | T-17 | `pg_sleep()`-class functions rejected regardless of statement validity | 5 | P0 (critical) | test_function_allowlist.py (100% blocked) | Done |
+| T-20 | Resource/cost pre-check (EXPLAIN-based) | REQ-SAFE-03 | T-19 | Pathological Cartesian join rejected before execution | 5 | P0 (critical) | test_resource_limits.py::test_cartesian_product_detection | Done |
+| T-21 | Row-filter injection | REQ-AUTH-03 | T-17 | `data_policy.row_filter_sql` applied automatically, unremovable by the LLM's proposed SQL | 5 | P0 (critical) | test_row_filter_injection.py | Done |
+| T-22 | Read-only DB role + timeout/row-limit sandbox | REQ-SAFE-04 | T-01 | Write attempt at engine level fails even if application-layer check somehow passed | 5 | P0 | test_resource_limits.py::test_execution_sandbox_row_cap | Done |
+| T-23 | Full Policy Engine test suite (seeds Attack Lab) | REQ-SAFE-05 | T-15..T-22 | ≥40 adversarial cases, 100% blocked | 5 | P0 (critical) | test_full_policy_suite.py (45/45 blocked, 100%) | Done |
 | T-24 | SQL Critic rule set | REQ-CRITIC-01 | T-23 | Flags `SUM(order_id)`-class smells in a 20-case test set at ≥85% precision | 6 | P0 | eval_category=semantic_smell | Not Started |
 | T-25 | Critic UI (warning + suggested fix) | REQ-CRITIC-01 | T-24 | User can proceed/revise from the warning | 6 | P0 | usability test | Not Started |
 | T-26 | Self-correction loop + E1–E7 taxonomy | REQ-CORR-01/02 | T-23 | Each error class individually reproducible via seeded failing queries | 7 | P0 | test_self_correction.py (per class) | Not Started |

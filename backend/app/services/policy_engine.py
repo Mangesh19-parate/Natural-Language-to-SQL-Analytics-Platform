@@ -171,12 +171,15 @@ class PolicyLookupService:
 
 class PolicyEngine:
     """
-    Core Policy Enforcement Engine (Weeks 4-5 / REQ-SAFE-01, REQ-SAFE-02, REQ-AUTH-03).
+    Core Policy Enforcement Engine (Weeks 4-5 / REQ-SAFE-01, REQ-SAFE-02, REQ-AUTH-03, REQ-SAFE-03, REQ-SAFE-04).
     Deterministic authorization gate:
     1. AST Statement-Type Validation (SELECT-only, blocks DDL/DML/multi-statement)
-    2. Table Authorization (deny-by-default, fail-closed)
-    3. Column Authorization (per-column access validation)
-    4. Aggregate Function Guard (blocks AVG/SUM/etc. on sensitive columns without explicit permission)
+    2. Function / Operator Allowlist (Blocks dangerous sleep/file/link functions - T-19)
+    3. Resource / Cost Pre-check (Blocks Cartesian joins / unconstrained products - T-20)
+    4. Table Authorization (deny-by-default, fail-closed - T-16)
+    5. Column Authorization (per-column access validation - T-17)
+    6. Aggregate Function Guard (blocks AVG/SUM/etc. on sensitive columns - T-18)
+    7. Row-Filter Injection (applies role-specific row filters unbypassably - T-21)
     """
 
     @classmethod
@@ -235,7 +238,27 @@ class PolicyEngine:
                 effective_tables=[],
             )
 
-        # Step 2: Schema / Table Authorization (T-16 / REQ-SAFE-02 — Deny by default)
+        # Step 2: Function Allowlist Check (T-19 / Rule R1.3 / SEC-4)
+        if analysis.disallowed_functions:
+            for d_func in analysis.disallowed_functions:
+                violations.append(
+                    PolicyViolation(
+                        violation_type=PolicyViolationType.DISALLOWED_FUNCTION,
+                        function_name=d_func,
+                        message=f"Disallowed function '{d_func}' is blocked by security policy (Rule R1.3).",
+                    )
+                )
+
+        # Step 3: Resource Limits & Cartesian Product Check (T-20 / Rule R1.5 / SEC-5)
+        if analysis.has_cartesian_join:
+            violations.append(
+                PolicyViolation(
+                    violation_type=PolicyViolationType.CARTESIAN_PRODUCT_BLOCKED,
+                    message="Unconstrained Cartesian join detected. Queries must include explicit join conditions (Rule R1.5).",
+                )
+            )
+
+        # Step 4: Schema / Table Authorization (T-16 / REQ-SAFE-02 — Deny by default)
         for table_name in analysis.tables:
             if not PolicyLookupService.is_table_accessible(db, role_id, data_source_id, table_name):
                 violations.append(
@@ -246,7 +269,7 @@ class PolicyEngine:
                     )
                 )
 
-        # If table access already violated, stop early with detailed violations
+        # If any blocking violations exist up to this point, stop with detailed report
         if violations:
             return PolicyValidationResult(
                 is_allowed=False,
@@ -255,7 +278,7 @@ class PolicyEngine:
                 effective_tables=analysis.tables,
             )
 
-        # Step 3: Column Authorization (T-17 / REQ-SAFE-02)
+        # Step 5: Column Authorization (T-17 / REQ-SAFE-02)
         for table_name, columns in analysis.table_columns.items():
             for col_name in columns:
                 if not PolicyLookupService.is_column_accessible(db, role_id, data_source_id, table_name, col_name):
@@ -268,7 +291,7 @@ class PolicyEngine:
                         )
                     )
 
-        # Step 4: Aggregate Function Guard (T-18 / REQ-AUTH-03 / Rule R1.4)
+        # Step 6: Aggregate Function Guard (T-18 / REQ-AUTH-03 / Rule R1.4)
         for agg in analysis.aggregates:
             func = agg["function"]
             t_name = agg["table"]
@@ -288,7 +311,7 @@ class PolicyEngine:
                     )
                 )
 
-        # Collect applicable row filters
+        # Step 7: Collect and Inject Applicable Row Filters (T-21 / Rule R1.2 / SEC-3)
         applied_row_filters: Dict[str, str] = {}
         for t_name in analysis.tables:
             rf = PolicyLookupService.get_row_filter(db, role_id, data_source_id, t_name)
@@ -296,10 +319,18 @@ class PolicyEngine:
                 applied_row_filters[t_name] = rf
 
         is_allowed = len(violations) == 0
+        injected_sql = None
+        if is_allowed:
+            if applied_row_filters:
+                injected_sql = SQLASTParser.inject_row_filters(sql, applied_row_filters)
+            else:
+                injected_sql = sql.strip().rstrip(";")
+
         return PolicyValidationResult(
             is_allowed=is_allowed,
             status="APPROVED" if is_allowed else "REJECTED",
             violations=violations,
             effective_tables=analysis.tables,
             applied_row_filters=applied_row_filters,
+            injected_sql=injected_sql,
         )
