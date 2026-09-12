@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import time
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
@@ -33,6 +34,46 @@ class LLMProviderService:
         """Computes SHA-256 hash for privacy-safe storage."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    def _generate_mock_response(self, user_prompt: str) -> str:
+        """Produces contextual mock SQL based on question content for testing."""
+        prompt_lower = user_prompt.lower()
+
+        if "how many employees" in prompt_lower or "count of employees" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT COUNT(*) AS total_employees FROM employees;",
+                "rationale": "Counting all rows in employees table"
+            })
+        elif "average salary" in prompt_lower or "avg salary" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT AVG(salary) AS avg_salary FROM employees;",
+                "rationale": "Computing average salary across employees"
+            })
+        elif "top 5 customers" in prompt_lower or "top customers" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT customer_name, total_spent FROM customers ORDER BY total_spent DESC LIMIT 5;",
+                "rationale": "Ordering customers by total_spent descending with limit 5"
+            })
+        elif "total sales" in prompt_lower or "sum of sales" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT SUM(sale_amount) AS total_revenue FROM sales;",
+                "rationale": "Summing sale_amount from sales table"
+            })
+        elif "orders by status" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT status, COUNT(*) AS count FROM orders GROUP BY status;",
+                "rationale": "Grouping orders by status with count"
+            })
+        elif "department" in prompt_lower and "employees" in prompt_lower:
+            return json.dumps({
+                "sql": "SELECT d.department_name, COUNT(e.employee_id) AS emp_count FROM departments d JOIN employees e ON d.department_id = e.department_id GROUP BY d.department_name;",
+                "rationale": "Joining departments and employees on department_id and aggregating"
+            })
+        else:
+            return json.dumps({
+                "sql": "SELECT COUNT(*) FROM employees;",
+                "rationale": "Default proposal for query"
+            })
+
     async def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> LLMResponse:
         """
         Executes generation call and returns content alongside audited hashes and metrics.
@@ -42,11 +83,7 @@ class LLMProviderService:
         start_time = time.time()
 
         if self.provider == "mock":
-            # Deterministic mock response for offline development and testing
-            content = json.dumps({
-                "sql": "SELECT COUNT(*) FROM employees;",
-                "rationale": "Mock SQL generated for smoke test."
-            })
+            content = self._generate_mock_response(user_prompt)
             prompt_tokens = len(full_input.split())
             completion_tokens = len(content.split())
             latency_ms = int((time.time() - start_time) * 1000)

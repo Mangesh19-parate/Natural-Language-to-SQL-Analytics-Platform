@@ -1,5 +1,45 @@
 from typing import Optional, List, Dict
-from pydantic import BaseModel
+from enum import Enum
+from pydantic import BaseModel, Field
+
+
+class PolicyViolationType(str, Enum):
+    STATEMENT_NOT_ALLOWED = "STATEMENT_NOT_ALLOWED"
+    MULTIPLE_STATEMENTS = "MULTIPLE_STATEMENTS"
+    SYNTAX_ERROR = "SYNTAX_ERROR"
+    UNAUTHORIZED_TABLE = "UNAUTHORIZED_TABLE"
+    UNAUTHORIZED_COLUMN = "UNAUTHORIZED_COLUMN"
+    UNAUTHORIZED_AGGREGATE = "UNAUTHORIZED_AGGREGATE"
+    DISALLOWED_FUNCTION = "DISALLOWED_FUNCTION"
+    ROW_FILTER_REQUIRED = "ROW_FILTER_REQUIRED"
+
+
+class PolicyViolation(BaseModel):
+    violation_type: PolicyViolationType
+    table_name: Optional[str] = None
+    column_name: Optional[str] = None
+    function_name: Optional[str] = None
+    message: str
+
+
+class SQLAnalysisResult(BaseModel):
+    is_valid_syntax: bool
+    is_select_only: bool
+    syntax_error: Optional[str] = None
+    tables: List[str] = Field(default_factory=list)
+    # Map table_name -> list of columns referenced
+    table_columns: Dict[str, List[str]] = Field(default_factory=dict)
+    # Map table_name -> list of (func_name, col_name)
+    aggregates: List[Dict[str, str]] = Field(default_factory=list)
+    functions: List[str] = Field(default_factory=list)
+
+
+class PolicyValidationResult(BaseModel):
+    is_allowed: bool
+    status: str = "APPROVED"  # "APPROVED" | "REJECTED"
+    violations: List[PolicyViolation] = Field(default_factory=list)
+    effective_tables: List[str] = Field(default_factory=list)
+    applied_row_filters: Dict[str, str] = Field(default_factory=dict)
 
 
 class DataPolicyCreate(BaseModel):

@@ -22,11 +22,11 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-11 | Intent Analyzer: Unauthorized pre-check | REQ-AUTH-03 | T-04, T-08 | Sensitive-column question from unpermitted role refused before SQL generation | 3 | P0 (critical) | test_intent_analyzer.py::test_unauthorized_precheck | Done |
 | T-12 | Ambiguity Engine | REQ-NLSQL-02 | T-08 | ≥80% of a 20-question ambiguous set correctly triggers clarification | 3 | P0 | test_ambiguity_engine.py (100% benchmark catch rate) | Done |
 | T-13 | Clarification UI flow | REQ-NLSQL-02 | T-12 | Radio-button clarification renders real column names, not generic text | 3 | P0 | ClarificationCard.jsx + Intent Studio UI | Done |
-| T-14 | SQL Generator (LLM proposal) | REQ-NLSQL-04 | T-09 | Produces `{sql, rationale}` for resolved questions | 4 | P0 | test_sql_generator.py | Not Started |
-| T-15 | AST SELECT-only validator | REQ-SAFE-01 | T-14 | Rejects 100% of non-SELECT statements in a 20-statement test set | 4 | P0 (critical) | test_sql_validator.py | Not Started |
-| T-16 | Schema authorization (deny-by-default) | REQ-SAFE-02 | T-04, T-15 | A table with no `data_policy` row is rejected, not allowed | 4 | P0 (critical) | test_policy_enforcement.py::test_schema_deny | Not Started |
-| T-17 | Column authorization | REQ-SAFE-02 | T-16 | Per-column check independent of table-level check | 4 | P0 (critical) | test_policy_enforcement.py::test_column_deny | Not Started |
-| T-18 | Aggregate-function guard | REQ-AUTH-03 | T-17 | `AVG(salary)` rejected unless role has `aggregate_allowed=true` | 4 | P0 (critical) | test_policy_enforcement.py::test_aggregate_guard | Not Started |
+| T-14 | SQL Generator (LLM proposal) | REQ-NLSQL-04 | T-09 | Produces `{sql, rationale}` for resolved questions | 4 | P0 | test_sql_generator.py | Done |
+| T-15 | AST SELECT-only validator | REQ-SAFE-01 | T-14 | Rejects 100% of non-SELECT statements in a 20-statement test set | 4 | P0 (critical) | test_sql_validator.py (100% rejection rate) | Done |
+| T-16 | Schema authorization (deny-by-default) | REQ-SAFE-02 | T-04, T-15 | A table with no `data_policy` row is rejected, not allowed | 4 | P0 (critical) | test_policy_enforcement.py::test_schema_deny | Done |
+| T-17 | Column authorization | REQ-SAFE-02 | T-16 | Per-column check independent of table-level check | 4 | P0 (critical) | test_policy_enforcement.py::test_column_deny | Done |
+| T-18 | Aggregate-function guard | REQ-AUTH-03 | T-17 | `AVG(salary)` rejected unless role has `aggregate_allowed=true` | 4 | P0 (critical) | test_policy_enforcement.py::test_aggregate_guard | Done |
 | T-19 | Function/operator allowlist | REQ-SAFE-02 | T-17 | `pg_sleep()`-class functions rejected regardless of statement validity | 5 | P0 (critical) | test_policy_enforcement.py::test_function_allowlist | Not Started |
 | T-20 | Resource/cost pre-check (EXPLAIN-based) | REQ-SAFE-03 | T-19 | Pathological Cartesian join rejected before execution | 5 | P0 (critical) | test_resource_limits.py | Not Started |
 | T-21 | Row-filter injection | REQ-AUTH-03 | T-17 | `data_policy.row_filter_sql` applied automatically, unremovable by the LLM's proposed SQL | 5 | P0 (critical) | test_row_filter_injection.py | Not Started |

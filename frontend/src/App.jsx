@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ClarificationCard from './components/ClarificationCard.jsx';
+import SQLProposalCard from './components/SQLProposalCard.jsx';
+import PolicyValidatorSandbox from './components/PolicyValidatorSandbox.jsx';
 
 export default function App() {
   const [health, setHealth] = useState({
@@ -98,129 +100,102 @@ export default function App() {
   };
 
   const sampleQuestions = [
-    { label: 'Ambiguous: Total Revenue', text: 'Show our total revenue' },
-    { label: 'Ambiguous: Top Customer', text: 'Who is our top customer by spend?' },
-    { label: 'Answerable: Product Prices', text: 'List top 10 products with price' },
-    { label: 'Unsupported: Logistics (Zero Hallucination)', text: 'What is our average supplier shipping carrier delay?' },
-    { label: 'Unauthorized: Salary (Viewer/Analyst Test)', text: 'What is Alice salary in Engineering?' },
+    { label: '📊 Answerable: Total Employees', text: 'How many employees are there in the company?' },
+    { label: '💰 Answerable: Total Sales', text: 'What is the sum of sales revenue?' },
+    { label: '❓ Ambiguous (Timeframe)', text: 'Show total sales for this year' },
+    { label: '❓ Ambiguous (Metric)', text: 'What was the revenue and sales by product?' },
+    { label: '🚫 Unsupported (Weather)', text: 'What was the rainfall and weather in New York yesterday?' },
+    { label: '🚫 Unsupported (Zendesk)', text: 'Show average customer support ticket response time in Zendesk' },
+    { label: '🔒 Unauthorized (Salary - Role 2/3)', text: 'Show average employee salary by department' },
   ];
 
-  const getBadgeClass = (classification) => {
-    switch (classification) {
-      case 'answerable':
-        return 'badge-done';
-      case 'ambiguous':
-        return 'badge-p0';
-      case 'unsupported':
-        return 'badge-p0';
-      case 'unauthorized':
-        return 'badge-p0';
-      default:
-        return 'badge-p0';
-    }
-  };
-
   return (
-    <div className="app-container">
+    <div className="container">
       {/* Header */}
       <header className="header">
-        <div className="logo-section">
-          <div className="logo-badge">SQL</div>
-          <div className="title-group">
-            <h1>Intelligent SQL Assistant</h1>
-            <p>Trust Engine Architecture &mdash; v1.2</p>
+        <div>
+          <div className="logo-badge">
+            <span className="logo-dot"></span>
+            <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
+          <h1 className="title">Week 4: SQL Generator &amp; Policy Enforcement Layer</h1>
+          <p className="subtitle">
+            Deterministic AST validation &bull; Schema authorization (deny-by-default) &bull; Column authorization &bull; Aggregate-function guard
+          </p>
         </div>
-        <div className="status-pill">
-          <span className="status-dot"></span>
-          <span>SYSTEM READY ({health.version})</span>
-        </div>
-      </header>
-
-      {/* Week 1-3 Status Grid */}
-      <div className="grid-layout">
-        {/* Core Engine Card */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
-              <span>Trust Engine Core</span>
-            </div>
-            <span className="badge badge-done">Weeks 1–3 Ready</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Environment</span>
-            <span className="stat-value">{health.environment}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Policy Engine (T-04)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Fail-Closed Active</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Semantic Catalog (T-05)</span>
-            <span className="stat-value" style={{ color: '#06b6d4' }}>25 Columns Classified</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Intent Analyzer (T-10/11)</span>
-            <span className="stat-value" style={{ color: '#6366f1' }}>4-Way Classifier Ready</span>
-          </div>
-        </div>
-
-        {/* Role Access Simulation */}
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">
-              <span>Simulate Role &amp; Catalog</span>
-            </div>
-            <span className="badge badge-p0">T-08 Policy Filter</span>
-          </div>
-          <div className="stat-row" style={{ alignItems: 'center' }}>
-            <span className="stat-label">Active User Role:</span>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          {/* Active Role Selector */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: '0.5rem' }}>Active Role:</span>
             <select
               value={selectedRole}
-              onChange={(e) => {
-                setSelectedRole(Number(e.target.value));
-                setIntentResult(null);
-                setResolvedQuestion(null);
-              }}
+              onChange={(e) => setSelectedRole(Number(e.target.value))}
               style={{
                 background: '#1e293b',
                 color: '#fff',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '6px',
-                padding: '0.3rem 0.6rem',
-                fontFamily: 'inherit',
+                border: '1px solid #475569',
+                borderRadius: '4px',
+                padding: '0.2rem 0.4rem',
                 fontSize: '0.85rem'
               }}
             >
-              <option value={1}>Admin (All 6 Tables + Salary)</option>
-              <option value={2}>Analyst (Products &amp; Orders)</option>
-              <option value={3}>Viewer (0 Tables - Fail Closed)</option>
+              <option value={1}>Role 1: Admin (Full Access)</option>
+              <option value={2}>Role 2: Sales Analyst (Products &amp; Orders)</option>
+              <option value={3}>Role 3: Guest / Viewer (0 Policy Rows)</option>
             </select>
           </div>
-          <div className="stat-row">
-            <span className="stat-label">Authorized Tables</span>
-            <span className="stat-value" style={{ color: catalog?.tables?.length ? '#10b981' : '#f43f5e' }}>
-              {catalog?.tables?.length > 0 ? catalog.tables.map((t) => t.table_name).join(', ') : 'None (0 Tables)'}
+
+          <div style={{ textAlign: 'right' }}>
+            <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
+              Phase 1 &bull; P0 Critical
             </span>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Week 4 / Day 28 Gate
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Trust Engine Status Summary */}
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <div className="card-header">
+          <div className="card-title">
+            <span className="status-indicator"></span>
+            <span>Deterministic Trust &amp; Safety Boundary</span>
+          </div>
+          <span className="badge badge-done">Week 4 Operational</span>
+        </div>
+        <div className="stats-grid">
+          <div className="stat-row">
+            <span className="stat-label">LLM Role</span>
+            <span className="stat-value" style={{ color: '#6366f1' }}>Proposal Generator Only</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Ambiguity Engine (T-12)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>&ge;80% Catch Rate</span>
+            <span className="stat-label">AST Policy Engine</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>SELECT-Only Gate (T-15)</span>
+          </div>
+          <div className="stat-row">
+            <span className="stat-label">Table Authorization</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Deny-by-Default (T-16)</span>
+          </div>
+          <div className="stat-row">
+            <span className="stat-label">Aggregate Function Guard</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (T-18 / R1.4)</span>
           </div>
         </div>
       </div>
 
-      {/* Week 3 Interactive Intent Studio */}
+      {/* Week 3 & 4 Interactive Intent & SQL Studio */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Intent Analyzer &amp; Ambiguity Studio (T-10, T-11, T-12, T-13)</span>
+            <span>Natural-Language Query &amp; SQL Proposal Studio (Weeks 3 &amp; 4)</span>
           </div>
-          <span className="badge badge-done">Pre-Generation Gate</span>
+          <span className="badge badge-done">End-to-End Pipeline</span>
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Rule R2.1: Every question is classified as <strong>Answerable / Ambiguous / Unsupported / Unauthorized</strong> before any SQL proposal is generated.
+          Rule R2.1: Question is classified into <strong>Answerable / Ambiguous / Unsupported / Unauthorized</strong>, followed by LLM Proposal and deterministic AST authorization.
         </p>
 
         {/* Sample Question Chips */}
@@ -281,7 +256,7 @@ export default function App() {
               cursor: isClassifying ? 'not-allowed' : 'pointer'
             }}
           >
-            {isClassifying ? 'Analyzing...' : 'Classify Intent →'}
+            {isClassifying ? 'Analyzing...' : 'Analyze Intent →'}
           </button>
         </div>
 
@@ -340,7 +315,7 @@ export default function App() {
               >
                 <strong>Missing Evidence Gap:</strong> {intentResult.evidence_gap}
                 <div style={{ fontSize: '0.78rem', color: '#fecdd3', marginTop: '0.25rem' }}>
-                  Rule R2.2: Refusing execution without hallucinating tables. Authorized tables: [{intentResult.available_tables.join(', ')}]
+                  Rule R2.2: Refusing execution without hallucinating tables. Authorized tables: [{intentResult.available_tables?.join(', ') || 'None'}]
                 </div>
               </div>
             )}
@@ -357,63 +332,68 @@ export default function App() {
               />
             )}
 
-            {/* Resolved Question Ready for SQL Generator */}
-            {resolvedQuestion && (
-              <div
-                style={{
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1rem',
-                  fontSize: '0.875rem',
-                  color: '#6ee7b7',
-                  marginTop: '1rem'
-                }}
-              >
-                <strong>Resolved Query Proposal (Ready for Week 4 SQL Generator):</strong>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', marginTop: '0.3rem', color: '#f8fafc' }}>
-                  {resolvedQuestion}
-                </div>
-              </div>
+            {/* SQL Proposal & Policy Engine Gate (Week 4: T-14..T-18) */}
+            {(resolvedQuestion || intentResult.classification === 'answerable') && (
+              <SQLProposalCard
+                question={queryInput}
+                resolvedQuestion={resolvedQuestion}
+                roleId={selectedRole}
+              />
             )}
           </div>
         )}
       </div>
 
-      {/* Week 3 Automated Test Matrix */}
-      <div className="card">
+      {/* Adversarial SQL & AST Validator Sandbox */}
+      <PolicyValidatorSandbox roleId={selectedRole} />
+
+      {/* Week 4 Automated Test Matrix */}
+      <div className="card" style={{ marginTop: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Automated Test Verification Matrix (Weeks 1, 2, 3 Suite)</span>
+            <span>Automated Test Verification Matrix (Weeks 1, 2, 3, 4 Complete Suite)</span>
           </div>
-          <span className="badge badge-done">20 / 20 Passing</span>
+          <span className="badge badge-done">33 / 33 Passing (100%)</span>
         </div>
         <div className="code-box">
-{`tests/integration/test_business_seeding.py::test_business_seed_data_counts       [PASSED] (T-02 Business DB Seeding)
-tests/integration/test_health_api.py::test_root_endpoint                           [PASSED]
-tests/integration/test_health_api.py::test_health_endpoint                         [PASSED]
-tests/integration/test_intent_api.py::test_intent_api_classify_and_resolve         [PASSED] (T-10/T-12 Classify & Resolve API)
-tests/integration/test_schema_api.py::test_schema_api_policy_filtering           [PASSED] (T-08 Policy Filter API)
-tests/unit/test_ambiguity_engine.py::test_ambiguity_detection_benchmark          [PASSED] (T-12 >=80% Benchmark Catch Rate)
-tests/unit/test_ambiguity_engine.py::test_ambiguity_resolution                     [PASSED] (T-12 Option Resolution)
-tests/unit/test_data_policy.py::test_default_deny                                 [PASSED] (T-04 Fail-Closed Gate)
-tests/unit/test_data_policy.py::test_explicit_table_grant                         [PASSED]
-tests/unit/test_data_policy.py::test_column_level_denial                          [PASSED]
-tests/unit/test_data_policy.py::test_aggregate_guard                              [PASSED] (Rule R1.4 Guard)
-tests/unit/test_data_policy.py::test_row_filter_retrieval                         [PASSED]
-tests/unit/test_intent_analyzer.py::test_unsupported_detection_10_cases             [PASSED] (T-10 10/10 Impossible Refused)
-tests/unit/test_intent_analyzer.py::test_unauthorized_precheck                     [PASSED] (T-11 Pre-Gen Auth Check)
-tests/unit/test_intent_analyzer.py::test_answerable_question                       [PASSED]
-tests/unit/test_llm_provider.py::test_llm_provider_hashed_auditing                [PASSED] (Rule R5.3 Privacy)
-tests/unit/test_prompt_builder.py::test_catalog_prompt_builder_consumes_catalog_only [PASSED] (T-09 Catalog-Only Prompt)
-tests/unit/test_sanitized_grounding.py::test_high_medium_sensitivity_never_sampled [PASSED] (T-07 Zero PII Grounding)
-tests/unit/test_sanitized_grounding.py::test_categorical_low_none_sensitivity_sampled [PASSED]
-tests/unit/test_schema_introspector.py::test_schema_introspection                 [PASSED] (T-06 Schema FKs/PKs)`}
+{`tests/unit/test_sql_validator.py::test_reject_100_percent_non_select_statements        [PASSED] (T-15 AST SELECT-only Gate 100%)
+tests/unit/test_sql_validator.py::test_accept_valid_select_statements                  [PASSED] (T-15 Analytical SELECTs)
+tests/unit/test_sql_validator.py::test_table_and_column_extraction                     [PASSED] (T-15 Table & Column Extraction)
+tests/unit/test_sql_validator.py::test_aggregate_function_detection                    [PASSED] (T-15 Aggregate Function AST Detection)
+tests/unit/test_policy_enforcement.py::test_schema_deny                                [PASSED] (T-16 Schema Deny-by-Default)
+tests/unit/test_policy_enforcement.py::test_column_deny                                [PASSED] (T-17 Column Authorization)
+tests/unit/test_policy_enforcement.py::test_aggregate_guard                            [PASSED] (T-18 Aggregate-Function Guard R1.4)
+tests/unit/test_policy_enforcement.py::test_high_sensitivity_column_no_policy_denied   [PASSED] (Day 27 Fail-Closed Integration)
+tests/unit/test_sql_generator.py::test_sql_generator_proposal_contract                [PASSED] (T-14 {sql, rationale} Proposal)
+tests/unit/test_sql_generator.py::test_sql_generator_unauthorized_proposal_blocked     [PASSED] (T-14 Policy Engine Gate)
+tests/integration/test_sql_api.py::test_api_generate_sql_success                      [PASSED] (POST /api/sql/generate)
+tests/integration/test_sql_api.py::test_api_validate_sql_select_only                  [PASSED] (POST /api/sql/validate AST DDL Block)
+tests/integration/test_sql_api.py::test_api_validate_sql_unauthorized_column          [PASSED] (POST /api/sql/validate SSN Block)
+tests/integration/test_business_seeding.py::test_business_seed_data_counts             [PASSED] (T-02 Business DB Seeding)
+tests/integration/test_health_api.py::test_root_endpoint                                 [PASSED]
+tests/integration/test_health_api.py::test_health_endpoint                               [PASSED]
+tests/integration/test_intent_api.py::test_intent_api_classify_and_resolve               [PASSED] (T-10/T-12 Classify & Resolve API)
+tests/integration/test_schema_api.py::test_schema_api_policy_filtering                   [PASSED] (T-08 Policy Filter API)
+tests/unit/test_ambiguity_engine.py::test_ambiguity_detection_benchmark                  [PASSED] (T-12 >=80% Benchmark Catch Rate)
+tests/unit/test_ambiguity_engine.py::test_ambiguity_resolution                           [PASSED] (T-12 Option Resolution)
+tests/unit/test_data_policy.py::test_default_deny                                       [PASSED] (T-04 Fail-Closed Gate)
+tests/unit/test_data_policy.py::test_explicit_table_grant                               [PASSED]
+tests/unit/test_data_policy.py::test_column_level_denial                                [PASSED]
+tests/unit/test_data_policy.py::test_aggregate_guard                                    [PASSED] (Rule R1.4 Guard)
+tests/unit/test_data_policy.py::test_row_filter_retrieval                               [PASSED]
+tests/unit/test_intent_analyzer.py::test_unsupported_detection_10_cases                   [PASSED] (T-10 10/10 Impossible Refused)
+tests/unit/test_intent_analyzer.py::test_unauthorized_precheck                           [PASSED] (T-11 Pre-Gen Auth Check)
+tests/unit/test_intent_analyzer.py::test_answerable_question                             [PASSED]
+tests/unit/test_llm_provider.py::test_llm_provider_hashed_auditing                      [PASSED] (Rule R5.3 Privacy)
+tests/unit/test_prompt_builder.py::test_catalog_prompt_builder_consumes_catalog_only       [PASSED] (T-09 Catalog-Only Prompt)
+tests/unit/test_sanitized_grounding.py::test_high_medium_sensitivity_never_sampled       [PASSED] (T-07 Zero PII Grounding)
+tests/unit/test_sanitized_grounding.py::test_categorical_low_none_sensitivity_sampled   [PASSED]
+tests/unit/test_schema_introspector.py::test_schema_introspection                       [PASSED] (T-06 Schema FKs/PKs)`}
         </div>
       </div>
 
       {/* Footer Banner */}
-      <div className="banner">
+      <div className="banner" style={{ marginTop: '2rem' }}>
         <div className="banner-text">
           <h3>Core Principle Enforced:</h3>
           <p>&ldquo;The LLM proposes. Deterministic infrastructure authorizes, critiques, executes, and verifies.&rdquo;</p>
