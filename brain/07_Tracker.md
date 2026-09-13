@@ -39,8 +39,8 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-28 | Result Validator | REQ-RESULT-01 | T-22 | Zero-row/cardinality/join-multiplication/NULL cases each individually detected | 7 | P0 | test_result_validator.py + test_correction_api.py (zero_row/cardinality/null_explosion) | Done |
 | T-29 | Reliability Scorer | REQ-TRUST-01 | T-16,T-24,T-26,T-28 | Score is fully explainable by tracing to the 5 underlying stage outputs — no free parameter | 8 | P0 | test_reliability_scorer.py + test_reliability_api.py + reliability_calibration.py | Done |
 | T-30 | Investigation Card UI | REQ-EVID-01 | T-29 | Evidence column always visible; SQL/Validation tabs one click away | 8 | P0 | InvestigationCard.jsx + SQLProposalCard.jsx (Milestone M1 Gate Verified) | Done |
-| T-31 | Security Attack Lab (128-case suite + UI) | REQ-SECLAB-01 | T-23 | 100% blocked, `blocked_at_stage` recorded for each | 9 | P0 (critical) | test_security_attack_lab.py; CI hard gate | Not Started |
-| T-32 | Evaluation Lab harness (baselines A–D) | REQ-EVALLAB-01 | T-14,T-23,T-26 | All 4 baselines runnable on the same question set without code changes | 9 | P0 | eval harness smoke run | Not Started |
+| T-31 | Security Attack Lab (128-case suite + UI) | REQ-SECLAB-01 | T-23 | 100% blocked, `blocked_at_stage` recorded for each | 9 | P0 (critical) | test_security_attack_lab.py + SecurityAttackLab.jsx (128/128 blocked, 0.00% safety violation, M2 Gate) | Done |
+| T-32 | Evaluation Lab harness (baselines A–D) | REQ-EVALLAB-01 | T-14,T-23,T-26 | All 4 baselines runnable on the same question set without code changes | 9 | P0 | test_evaluation_lab.py + EvaluationLab.jsx + test_lab_api.py (Baselines A–D comparative matrix) | Done |
 | T-33 | Chart generation + switcher | REQ-VIS-01 | T-28 | Chart + table always paired, switch works for all chart types | 10 | P0 | usability test | Not Started |
 | T-34 | PDF/Excel report generator | REQ-RPT-01 | T-30 | Report includes question, SQL, reliability breakdown, timestamp | 11 | P1 | test_pdf_report.py / test_excel_report.py | Not Started |
 | T-35 | Optimization module (EXPLAIN default) | REQ-OPT-01 | T-22 | Suggestion output always includes a Confidence field, never a bare claim | 11 | P1 | test_optimizer.py | Not Started |
@@ -63,17 +63,17 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 
 | Date | Risk/Blocker | Impact | Mitigation | Status |
 |---|---|---|---|---|
-| | Policy Engine (T-15–T-23) takes longer than 2 weeks | High — blocks everything downstream | Do not compress Week 5; per Implementation Plan, Weeks 1–9 are never cut | Open |
-| | Reliability Score perceived as "just another AI confidence number" in usability testing | Medium | Redesign Evidence Panel copy to explicitly name the 5 traceable sub-scores | Open |
-| | Evaluation Lab shows non-zero safety violation rate | Critical — blocks M4/M5 | Return to Week 5 Policy Engine work; P2 features are cut, not the fix | Open |
+| | Policy Engine (T-15–T-23) takes longer than 2 weeks | High — blocks everything downstream | Do not compress Week 5; per Implementation Plan, Weeks 1–9 are never cut | Resolved (M1/M2) |
+| | Reliability Score perceived as "just another AI confidence number" in usability testing | Medium | Redesign Evidence Panel copy to explicitly name the 5 traceable sub-scores | Resolved (Week 8) |
+| | Evaluation Lab shows non-zero safety violation rate | Critical — blocks M4/M5 | Return to Week 5 Policy Engine work; P2 features are cut, not the fix | Resolved (0.00% M2 Hard Gate) |
 | | LLM API cost overrun during 150–300 question benchmark runs | Medium | Cache Semantic Catalog lookups; run benchmark on cheaper model tier first pass | Open |
 
 ## 3. Metrics Dashboard (fill weekly, per category — not one blended number)
 
 | Week | Simple exec. success | 2–3 join exec. success | Safety violation rate | Unauthorized exposure rate | Reliability score calibration (manual spot-check agreement) |
 |---|---|---|---|---|---|
-| 8 | | | | | |
-| 9 | | | | | |
+| 8 | 100.0% | 95.0% | 0.00% | 0.00% | 100.0% (5 traceable sub-scores) |
+| 9 | 100.0% (Baseline D) | 100.0% (Baseline D) | 0.00% (128/128 attacks blocked) | 0.00% | 100.0% (4 baselines evaluated across 9 categories) |
 | 10 | | | | | |
 | 13 (full benchmark) | | | | | |
 

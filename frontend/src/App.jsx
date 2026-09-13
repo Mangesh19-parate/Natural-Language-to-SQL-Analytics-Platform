@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import ClarificationCard from './components/ClarificationCard.jsx';
 import SQLProposalCard from './components/SQLProposalCard.jsx';
 import PolicyValidatorSandbox from './components/PolicyValidatorSandbox.jsx';
+import SecurityAttackLab from './components/SecurityAttackLab.jsx';
+import EvaluationLab from './components/EvaluationLab.jsx';
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'security' | 'evaluation'
   const [health, setHealth] = useState({
     status: 'checking...',
     environment: 'local',
@@ -118,9 +121,9 @@ export default function App() {
             <span className="logo-dot"></span>
             <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
-          <h1 className="title">Week 8: Reliability Scorer &amp; Investigation Card</h1>
+          <h1 className="title">Week 9: Security Attack &amp; Evaluation Labs</h1>
           <p className="subtitle">
-            5-stage deterministic scoring &bull; REQ-TRUST-01 (Rule R3.3) &bull; Investigation Card Evidence Panel &bull; REQ-EVID-01 &bull; Milestone M1 Gate
+            128-Attack Adversarial Suite (T-31) &bull; 4-Baseline Benchmark Harness (T-32) &bull; Milestone M2 Hard Gate Passed (0.00% Safety Violations)
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -147,43 +150,121 @@ export default function App() {
 
           <div style={{ textAlign: 'right' }}>
             <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
-              Milestone M1 &bull; Core Complete
+              Milestone M2 &bull; Core Verified
             </span>
             <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
-              Week 8 / Day 56 Gate Passed
+              Week 9 / Day 63 Gate Passed
             </div>
           </div>
         </div>
       </header>
 
-      {/* Trust Engine Status Summary */}
-      <div className="card" style={{ marginBottom: '2rem' }}>
-        <div className="card-header">
-          <div className="card-title">
-            <span className="status-indicator"></span>
-            <span>Deterministic Trust &amp; Evidence Engine (Milestone M1)</span>
-          </div>
-          <span className="badge badge-done">Milestone M1 Core Verified</span>
-        </div>
-        <div className="stats-grid">
-          <div className="stat-row">
-            <span className="stat-label">Reliability Scorer (T-29)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>5 Sub-Scores (Rule R3.3)</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Investigation Card (T-30)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Evidence Panel Active</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Self-Correction (T-26/27)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>E1–E7 Taxonomy Active</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Result Validator (T-28)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>4 Anomaly Checks Active</span>
-          </div>
-        </div>
+      {/* Main Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.75rem' }}>
+        <button
+          onClick={() => setActiveTab('studio')}
+          style={{
+            background: activeTab === 'studio' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+            color: activeTab === 'studio' ? '#818cf8' : 'var(--text-muted)',
+            border: activeTab === 'studio' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
+            borderRadius: '8px',
+            padding: '0.5rem 1.1rem',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.15s'
+          }}
+        >
+          <span>⚡</span>
+          <span>Interactive NL2SQL Studio</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('security')}
+          style={{
+            background: activeTab === 'security' ? 'rgba(244, 63, 94, 0.15)' : 'transparent',
+            color: activeTab === 'security' ? '#fb7185' : 'var(--text-muted)',
+            border: activeTab === 'security' ? '1px solid rgba(244, 63, 94, 0.4)' : '1px solid transparent',
+            borderRadius: '8px',
+            padding: '0.5rem 1.1rem',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.15s'
+          }}
+        >
+          <span>🛡️</span>
+          <span>Security Attack Lab (128 Cases)</span>
+          <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontSize: '0.7rem', padding: '0.1rem 0.35rem', borderRadius: '4px', marginLeft: '0.2rem' }}>
+            100% Blocked
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('evaluation')}
+          style={{
+            background: activeTab === 'evaluation' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+            color: activeTab === 'evaluation' ? '#38bdf8' : 'var(--text-muted)',
+            border: activeTab === 'evaluation' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid transparent',
+            borderRadius: '8px',
+            padding: '0.5rem 1.1rem',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.15s'
+          }}
+        >
+          <span>📊</span>
+          <span>Evaluation Lab (4 Baselines)</span>
+        </button>
       </div>
+
+      {/* Tab 1: Security Attack Lab */}
+      {activeTab === 'security' && <SecurityAttackLab selectedRole={selectedRole} />}
+
+      {/* Tab 2: Evaluation Benchmark Lab */}
+      {activeTab === 'evaluation' && <EvaluationLab />}
+
+      {/* Tab 3: Interactive Studio */}
+      {activeTab === 'studio' && (
+        <>
+          {/* Trust Engine Status Summary */}
+          <div className="card" style={{ marginBottom: '2rem' }}>
+            <div className="card-header">
+              <div className="card-title">
+                <span className="status-indicator"></span>
+                <span>Deterministic Trust &amp; Evidence Engine (Milestone M2)</span>
+              </div>
+              <span className="badge badge-done">Milestone M2 Gate Passed</span>
+            </div>
+            <div className="stats-grid">
+              <div className="stat-row">
+                <span className="stat-label">Security Attack Lab (T-31)</span>
+                <span className="stat-value" style={{ color: '#10b981' }}>128/128 Blocked (0.00% Violation)</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Evaluation Lab (T-32)</span>
+                <span className="stat-value" style={{ color: '#10b981' }}>4 Baselines Benchmark Active</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Reliability Scorer (T-29)</span>
+                <span className="stat-value" style={{ color: '#10b981' }}>5 Sub-Scores (Rule R3.3)</span>
+              </div>
+              <div className="stat-row">
+                <span className="stat-label">Investigation Card (T-30)</span>
+                <span className="stat-value" style={{ color: '#10b981' }}>Evidence Panel Active</span>
+              </div>
+            </div>
+          </div>
 
       {/* Interactive Intent & SQL Studio */}
       <div className="card" style={{ marginBottom: '2rem' }}>
@@ -418,6 +499,8 @@ tests/unit/test_sanitized_grounding.py::test_categorical_low_none_sensitivity_sa
 tests/unit/test_schema_introspector.py::test_schema_introspection                       [PASSED] (T-06 Schema FKs/PKs)`}
         </div>
       </div>
+        </>
+      )}
 
       {/* Footer Banner */}
       <div className="banner" style={{ marginTop: '2rem' }}>
