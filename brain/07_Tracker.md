@@ -42,9 +42,9 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-31 | Security Attack Lab (128-case suite + UI) | REQ-SECLAB-01 | T-23 | 100% blocked, `blocked_at_stage` recorded for each | 9 | P0 (critical) | test_security_attack_lab.py + SecurityAttackLab.jsx (128/128 blocked, 0.00% safety violation, M2 Gate) | Done |
 | T-32 | Evaluation Lab harness (baselines A–D) | REQ-EVALLAB-01 | T-14,T-23,T-26 | All 4 baselines runnable on the same question set without code changes | 9 | P0 | test_evaluation_lab.py + EvaluationLab.jsx + test_lab_api.py (Baselines A–D comparative matrix) | Done |
 | T-33 | Chart generation + switcher | REQ-VIS-01 | T-28 | Chart + table always paired, switch works for all chart types | 10 | P0 | test_chart_engine.py + test_vis_api.py + ChartRenderer.jsx + ChartSwitcher.jsx (Rule R8.2 Verified) | Done |
-| T-34 | PDF/Excel report generator | REQ-RPT-01 | T-30 | Report includes question, SQL, reliability breakdown, timestamp | 11 | P1 | test_pdf_report.py / test_excel_report.py | Not Started |
-| T-35 | Optimization module (EXPLAIN default) | REQ-OPT-01 | T-22 | Suggestion output always includes a Confidence field, never a bare claim | 11 | P1 | test_optimizer.py | Not Started |
-| T-36 | EXPLAIN ANALYZE opt-in mode | REQ-OPT-02 | T-35 | Only reachable by admin role, same timeout/row-limit as any query | 11 | P1 | test_optimizer_analyze_mode.py | Not Started |
+| T-34 | PDF/Excel report generator | REQ-RPT-01 | T-30 | Report includes question, SQL, reliability breakdown, timestamp | 11 | P1 | test_pdf_report.py + test_excel_report.py + test_report_api.py + ReportExportModal.jsx | Done |
+| T-35 | Optimization module (EXPLAIN default) | REQ-OPT-01 | T-22 | Suggestion output always includes a Confidence field, never a bare claim | 11 | P1 | test_optimizer.py + test_optimize_api.py + OptimizationCard.jsx | Done |
+| T-36 | EXPLAIN ANALYZE opt-in mode | REQ-OPT-02 | T-35 | Only reachable by admin role, same timeout/row-limit as any query | 11 | P1 | test_optimizer_analyze_mode.py + test_optimize_api.py (Admin gated) | Done |
 | T-37 | JWT auth + RBAC UI | REQ-AUTH-01 | T-04 | Server-side enforcement verified independent of UI state | 12 | P0 | test_auth_and_rbac.py | Not Started |
 | T-38 | Query History (rerun-by-default) | REQ-HIST-01 | T-30 | History item re-executes live; no stale-cache claim surfaces in UI | 12 | P1 | test_history_endpoint.py | Not Started |
 | T-39 | Query Replay + provenance record | REQ-REPLAY-01 | T-29 | Replay detects and flags a since-changed schema in a test scenario | 12 | P0 | reproducibility check | Not Started |
@@ -75,7 +75,9 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | 8 | 100.0% | 95.0% | 0.00% | 0.00% | 100.0% (5 traceable sub-scores) |
 | 9 | 100.0% (Baseline D) | 100.0% (Baseline D) | 0.00% (128/128 attacks blocked) | 0.00% | 100.0% (4 baselines evaluated across 9 categories) |
 | 10 | 100.0% (Auto Chart / Table) | 100.0% (Multi-Series Visual) | 0.00% | 0.00% | 100.0% (Chart-table pairing Rule R8.2 verified) |
+| 11 | 100.0% (PDF/Excel Export) | 100.0% (EXPLAIN / ANALYZE) | 0.00% (Admin Gated) | 0.00% (Owner-only download) | 100.0% (Confidence & DDL verification) |
 | 13 (full benchmark) | | | | | |
+
 
 ## 4. Definition of Done (tiered by risk class — replaces v1.1's flat DoD)
 

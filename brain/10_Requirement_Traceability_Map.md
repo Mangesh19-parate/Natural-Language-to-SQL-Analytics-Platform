@@ -23,10 +23,11 @@ Canonical requirement IDs. Every capability is tracked through: **PRD → TRD �
 | REQ-CORR-02 | Error taxonomy (E1–E7) + diff view | P0 | 5 | 3.2 | §2 Self-Correction | `query_history.error_type` | 2.6 | 3.2 | T-15 | eval_recovery_by_error_class |
 | REQ-EXPL-01 | Explain SQL (ad-hoc pasted SQL AND historical query) | P0 | 5 | 3.3 | §2 Result Processor | — | 2.4 | 3.2 | T-16/new | test_sql_explainer.py |
 | REQ-VIS-01 | Chart-type heuristic + selectable chart tab | P0 | 5 | 3.4 | §2 Result Processor | `query_history.chart_type` | 2.3 | 3.2 | T-19/21/22 | usability test |
-| REQ-OPT-01 | Evidence-based optimization suggestions (EXPLAIN, not EXPLAIN ANALYZE, by default) | P1 | 6 | 3.5 | §2 Optimize | `optimization_suggestions` | 2.7 | 3.2 | T-27/28 | test_optimizer.py |
-| REQ-OPT-02 | Controlled EXPLAIN ANALYZE mode (opt-in, sandboxed, admin-only) | P1 | 6 | 3.5 | §2 Optimize | `optimization_suggestions.mode` | 2.7 | — | T-new | test_optimizer_analyze_mode.py |
-| REQ-RPT-01 | PDF/Excel report generation (single query) | P1 | 5 | 5 | §2 Reporting | `reports` | 2.9 | 3.6 | T-24/25 | test_pdf_report.py |
-| REQ-RPT-02 | Report access = owner-only download (no "shareable" claim in v1) | P1 | 6 | 5 | §2 Reporting | `reports` (no share fields in v1) | 2.9 | 3.6 | T-new | manual review |
+| REQ-OPT-01 | Evidence-based optimization suggestions (EXPLAIN, not EXPLAIN ANALYZE, by default) | P1 | 6 | 3.5 | §2 Optimize | `optimization_suggestions` | 2.7 | 3.2 | T-35 | test_optimizer.py + test_optimize_api.py + OptimizationCard.jsx |
+| REQ-OPT-02 | Controlled EXPLAIN ANALYZE mode (opt-in, sandboxed, admin-only) | P1 | 6 | 3.5 | §2 Optimize | `optimization_suggestions.mode` | 2.7 | — | T-36 | test_optimizer_analyze_mode.py + test_optimize_api.py |
+| REQ-RPT-01 | PDF/Excel report generation (single query & session) | P1 | 5 | 5 | §2 Reporting | `reports` | 2.9 | 3.6 | T-34 | test_pdf_report.py + test_excel_report.py + test_report_api.py |
+| REQ-RPT-02 | Report access = owner-only download (no "shareable" claim in v1) | P1 | 6 | 5 | §2 Reporting | `reports` (no share fields in v1) | 2.9 | 3.6 | T-34 | test_report_api.py::test_pdf_report_export_and_download_api |
+
 | REQ-HIST-01 | Query history list + **rerun-by-default** (no result cache in v1) | P1 | 5 | 5 | §2 History/Audit | `query_history` | 2.10 | 3.8 | T-17/45 | test_history_endpoint.py |
 | REQ-MEM-01 | Structured conversational context (typed fields, not free text) | P1 | 5 | 3.2 | §2 Intent/Ambiguity Layer | `sessions.context_json` (typed schema) | 2.1 | — | T-21/22 | test_context_resolution.py |
 | REQ-VER-01 | Schema snapshot + prompt version + model version recorded per query | P0 | — (new NFR) | 8 | §2 all stages | `query_history.schema_snapshot_id, prompt_version, model_name` | — | — | T-new | reproducibility check |

@@ -4,6 +4,8 @@ import SelfCorrectionCard from './SelfCorrectionCard.jsx';
 import ResultValidationCard from './ResultValidationCard.jsx';
 import ChartRenderer from './ChartRenderer.jsx';
 import ChartSwitcher from './ChartSwitcher.jsx';
+import OptimizationCard from './OptimizationCard.jsx';
+import ReportExportModal from './ReportExportModal.jsx';
 
 export default function InvestigationCard({
   question,
@@ -15,6 +17,8 @@ export default function InvestigationCard({
   const [activeTab, setActiveTab] = useState('chart');
   const [expandedSubScore, setExpandedSubScore] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   
   // Table state: sorting, filtering, pagination
   const [tableSearch, setTableSearch] = useState('');
@@ -249,47 +253,72 @@ export default function InvestigationCard({
           </div>
         </div>
 
-        {/* Reliability Score Badge */}
-        {reliability && (
-          <div
+        {/* Actions & Reliability Score Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setIsExportModalOpen(true)}
             style={{
-              padding: '0.65rem 1rem',
-              borderRadius: '12px',
-              textAlign: 'right',
-              ...getTierBadgeStyle(reliability.tier),
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(79, 70, 229, 0.3))',
+              border: '1px solid rgba(99, 102, 241, 0.5)',
+              color: '#c7d2fe',
+              borderRadius: '10px',
+              padding: '0.6rem 0.9rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: '0.2rem',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              alignItems: 'center',
+              gap: '0.4rem',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
+              transition: 'all 0.2s',
             }}
           >
-            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.85, fontWeight: 700 }}>
-              Evidence Reliability
+            <span>📑</span>
+            <span>Export Report</span>
+          </button>
+
+          {reliability && (
+            <div
+              style={{
+                padding: '0.65rem 1rem',
+                borderRadius: '12px',
+                textAlign: 'right',
+                ...getTierBadgeStyle(reliability.tier),
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: '0.2rem',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+              }}
+            >
+              <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', opacity: 0.85, fontWeight: 700 }}>
+                Evidence Reliability
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'monospace' }}>
+                  {reliability.composite_score}
+                  <span style={{ fontSize: '0.85rem', opacity: 0.7 }}> / 100</span>
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '6px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                  }}
+                >
+                  {reliability.tier === 'HIGH' ? '✓ HIGH' : reliability.tier === 'MEDIUM' ? '⚠ MEDIUM' : '✗ LOW'}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>
+                5 Traceable Sub-Scores &bull; Rule R3.3 Compliant
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'monospace' }}>
-                {reliability.composite_score}
-                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}> / 100</span>
-              </span>
-              <span
-                style={{
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  padding: '0.15rem 0.5rem',
-                  borderRadius: '6px',
-                  background: 'rgba(0, 0, 0, 0.2)',
-                }}
-              >
-                {reliability.tier === 'HIGH' ? '✓ HIGH' : reliability.tier === 'MEDIUM' ? '⚠ MEDIUM' : '✗ LOW'}
-              </span>
-            </div>
-            <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>
-              5 Traceable Sub-Scores &bull; Rule R3.3 Compliant
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
 
       {/* 2. Main Two-Column Canvas: Signature Evidence Panel + Quick Summary */}
       <div
@@ -541,6 +570,26 @@ export default function InvestigationCard({
             🛡️ Policy &amp; Sanity
           </button>
 
+          <button
+            onClick={() => setActiveTab('optimize')}
+            style={{
+              background: activeTab === 'optimize' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+              color: activeTab === 'optimize' ? '#818cf8' : '#94a3b8',
+              border: activeTab === 'optimize' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
+              borderRadius: '6px',
+              padding: '0.4rem 0.8rem',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+            }}
+          >
+            <span>⚡</span>
+            <span>Optimize</span>
+          </button>
+
           {correctionResult && (
             <button
               onClick={() => setActiveTab('correction')}
@@ -565,6 +614,7 @@ export default function InvestigationCard({
             </div>
           )}
         </div>
+
 
         {/* Tab Content Display */}
         <div style={{ marginTop: '1rem' }}>
@@ -867,8 +917,49 @@ export default function InvestigationCard({
           {activeTab === 'correction' && correctionResult && (
             <SelfCorrectionCard correctionResult={correctionResult} />
           )}
+
+          {/* TAB 7: QUERY OPTIMIZATION ENGINE (REQ-OPT-01 / REQ-OPT-02) */}
+          {activeTab === 'optimize' && (
+            <OptimizationCard
+              sql={activeSql}
+              queryId={executionResult?.query_id || proposalData?.query_id}
+              roleName="Admin"
+            />
+          )}
         </div>
       </div>
+
+      {/* Export Report Modal (REQ-RPT-01 / REQ-RPT-02 / Rule R8.3) */}
+      <ReportExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        currentQueryItem={{
+          query_id: executionResult?.query_id || proposalData?.query_id,
+          question: question || 'Executed Query',
+          proposed_sql: proposalData?.proposal?.sql,
+          executed_sql: activeSql,
+          status: isSuccess ? 'success' : 'failed',
+          latency_ms: latencyMs,
+          row_count: rowCount,
+          reliability_breakdown: reliability,
+          columns: columns,
+          rows: rows,
+        }}
+        sessionQueries={[{
+          query_id: executionResult?.query_id || proposalData?.query_id,
+          question: question || 'Executed Query',
+          executed_sql: activeSql,
+          status: isSuccess ? 'success' : 'failed',
+          latency_ms: latencyMs,
+          row_count: rowCount,
+          reliability_breakdown: reliability,
+          columns: columns,
+          rows: rows,
+        }]}
+        dataSourceName="Northwind Commercial DB"
+        roleName="Admin"
+      />
     </div>
   );
 }
+

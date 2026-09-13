@@ -9,6 +9,17 @@ from app.schemas.intent import (
     IntentClassifyRequest,
     IntentResolveRequest,
 )
+from app.schemas.report import (
+    ReportQueryItem,
+    ReportExportRequest,
+    ReportGenerateResponse,
+)
+from app.schemas.optimize import (
+    OptimizeExplainRequest,
+    OptimizeAnalyzeRequest,
+    OptimizationItem,
+    OptimizeResponse,
+)
 
 __all__ = [
     "StandardResponse",
@@ -28,4 +39,12 @@ __all__ = [
     "IntentAnalysisResult",
     "IntentClassifyRequest",
     "IntentResolveRequest",
+    "ReportQueryItem",
+    "ReportExportRequest",
+    "ReportGenerateResponse",
+    "OptimizeExplainRequest",
+    "OptimizeAnalyzeRequest",
+    "OptimizationItem",
+    "OptimizeResponse",
 ]
+
