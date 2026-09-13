@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import SQLCriticCard from './SQLCriticCard.jsx';
 import SelfCorrectionCard from './SelfCorrectionCard.jsx';
 import ResultValidationCard from './ResultValidationCard.jsx';
+import ChartRenderer from './ChartRenderer.jsx';
+import ChartSwitcher from './ChartSwitcher.jsx';
 
 export default function InvestigationCard({
   question,
@@ -10,9 +12,32 @@ export default function InvestigationCard({
   proposalData,
   onApplyFix,
 }) {
-  const [activeTab, setActiveTab] = useState('table');
+  const [activeTab, setActiveTab] = useState('chart');
   const [expandedSubScore, setExpandedSubScore] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(null);
+  
+  // Table state: sorting, filtering, pagination
+  const [tableSearch, setTableSearch] = useState('');
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Visualization state
+  const [currentChartSpec, setCurrentChartSpec] = useState(null);
+  const [isSwitchingChart, setIsSwitchingChart] = useState(false);
+
+  useEffect(() => {
+    if (executionResult?.chart_spec) {
+      setCurrentChartSpec(executionResult.chart_spec);
+      // If table is not visualizable, default to table tab
+      if (!executionResult.chart_spec.is_visualizable) {
+        setActiveTab('table');
+      } else {
+        setActiveTab('chart');
+      }
+    }
+  }, [executionResult]);
 
   if (!executionResult && !proposalData) return null;
 
@@ -27,7 +52,100 @@ export default function InvestigationCard({
   const isSuccess = executionResult?.success ?? proposalData?.can_execute ?? false;
   const activeSql = executionResult?.injected_sql || sql || proposalData?.proposal?.sql || '';
 
-  // Tier color styling
+  // Filtered & Sorted Table Rows
+  const processedRows = useMemo(() => {
+    let result = [...rows];
+    if (tableSearch.trim()) {
+      const q = tableSearch.toLowerCase();
+      result = result.filter((r) =>
+        columns.some((c) => String(r[c] ?? '').toLowerCase().includes(q))
+      );
+    }
+    if (sortCol) {
+      result.sort((a, b) => {
+        const valA = a[sortCol];
+        const valB = b[sortCol];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        const strA = String(valA ?? '');
+        const strB = String(valB ?? '');
+        return sortDir === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+    return result;
+  }, [rows, columns, tableSearch, sortCol, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
+  const paginatedRows = processedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const handleSort = (colName) => {
+    if (sortCol === colName) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortCol(colName);
+      setSortDir('asc');
+    }
+  };
+
+  const handleSelectChartType = async (typeKey) => {
+    if (!columns.length || !rows.length) return;
+    setIsSwitchingChart(true);
+    try {
+      const res = await fetch('/api/vis/generate-chart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          columns,
+          rows,
+          question,
+          requested_chart_type: typeKey,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.chart_spec) {
+        setCurrentChartSpec(data.chart_spec);
+      }
+    } catch (err) {
+      console.error('Chart switch failed:', err);
+      // Fallback: local override
+      if (currentChartSpec) {
+        setCurrentChartSpec({ ...currentChartSpec, chart_type: typeKey });
+      }
+    } finally {
+      setIsSwitchingChart(false);
+    }
+  };
+
+  const handleCopyCsv = () => {
+    if (!columns.length || !rows.length) return;
+    const header = columns.join(',');
+    const body = rows.map((r) => columns.map((c) => JSON.stringify(r[c] ?? '')).join(',')).join('\n');
+    const csvContent = `${header}\n${body}`;
+    navigator.clipboard.writeText(csvContent);
+    setCopyFeedback('CSV Copied to Clipboard!');
+    setTimeout(() => setCopyFeedback(null), 2000);
+  };
+
+  const handleDownloadCsv = () => {
+    if (!columns.length || !rows.length) return;
+    const header = columns.join(',');
+    const body = rows.map((r) => columns.map((c) => JSON.stringify(r[c] ?? '')).join(',')).join('\n');
+    const csvContent = `data:text/csv;charset=utf-8,${encodeURIComponent(`${header}\n${body}`)}`;
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', `query_results_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(activeSql);
+    setCopyFeedback('SQL Copied!');
+    setTimeout(() => setCopyFeedback(null), 2000);
+  };
+
   const getTierBadgeStyle = (tier) => {
     switch (tier) {
       case 'HIGH':
@@ -52,7 +170,6 @@ export default function InvestigationCard({
     }
   };
 
-  // Derive high-level answer summary
   const getAnswerHeadline = () => {
     if (!isSuccess) {
       return executionResult?.error || 'Query could not be executed due to policy or syntax constraints.';
@@ -67,7 +184,6 @@ export default function InvestigationCard({
       }
       return keys.map((k) => `${k}: ${rows[0][k]}`).join(' · ');
     }
-    // Multi-row preview
     const firstRow = rows[0];
     const firstKey = Object.keys(firstRow)[0];
     const secondKey = Object.keys(firstRow)[1];
@@ -75,22 +191,6 @@ export default function InvestigationCard({
       return `Top result: ${firstRow[firstKey]} (${firstRow[secondKey]}) · ${rowCount} total records found`;
     }
     return `${rowCount} records retrieved successfully`;
-  };
-
-  const handleCopyCsv = () => {
-    if (!columns.length || !rows.length) return;
-    const header = columns.join(',');
-    const body = rows.map((r) => columns.map((c) => JSON.stringify(r[c] ?? '')).join(',')).join('\n');
-    const csvContent = `${header}\n${body}`;
-    navigator.clipboard.writeText(csvContent);
-    setCopyFeedback('CSV Copied!');
-    setTimeout(() => setCopyFeedback(null), 2000);
-  };
-
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(activeSql);
-    setCopyFeedback('SQL Copied!');
-    setTimeout(() => setCopyFeedback(null), 2000);
   };
 
   const subScoresList = reliability ? [
@@ -129,7 +229,7 @@ export default function InvestigationCard({
         <div style={{ flex: 1, minWidth: '280px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
             <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#818cf8', fontWeight: 700 }}>
-              Analytical Investigation Card &bull; REQ-EVID-01
+              Analytical Investigation Card &bull; REQ-EVID-01 &bull; REQ-VIS-01
             </span>
           </div>
           <h3 style={{ margin: '0 0 0.5rem 0', color: '#f8fafc', fontSize: '1.15rem', fontWeight: 600 }}>
@@ -149,7 +249,7 @@ export default function InvestigationCard({
           </div>
         </div>
 
-        {/* Reliability Score Badge (REQ-TRUST-01 / Rule R3.3) */}
+        {/* Reliability Score Badge */}
         {reliability && (
           <div
             style={{
@@ -185,13 +285,13 @@ export default function InvestigationCard({
               </span>
             </div>
             <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>
-              5 Traceable Sub-Scores &bull; Zero Free Parameters
+              5 Traceable Sub-Scores &bull; Rule R3.3 Compliant
             </div>
           </div>
         )}
       </div>
 
-      {/* 2. Main Two-Column Canvas: Signature Evidence Panel + Result Preview */}
+      {/* 2. Main Two-Column Canvas: Signature Evidence Panel + Quick Summary */}
       <div
         style={{
           display: 'grid',
@@ -200,7 +300,7 @@ export default function InvestigationCard({
           marginBottom: '1.5rem',
         }}
       >
-        {/* Left Column: Signature Evidence Panel (Always Visible) */}
+        {/* Left Column: Signature Evidence Panel */}
         <div
           style={{
             background: 'rgba(0, 0, 0, 0.35)',
@@ -268,7 +368,6 @@ export default function InvestigationCard({
                   {data.summary}
                 </div>
 
-                {/* Expanded Audit Evidence Items */}
                 {expandedSubScore === key && (
                   <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
                     <div style={{ fontSize: '0.72rem', color: '#818cf8', fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -286,7 +385,7 @@ export default function InvestigationCard({
           </div>
         </div>
 
-        {/* Right Column: Fast KPI & Top Results Summary */}
+        {/* Right Column: Execution Stats & Mode */}
         <div
           style={{
             background: 'rgba(0, 0, 0, 0.35)',
@@ -315,7 +414,6 @@ export default function InvestigationCard({
             </div>
           </div>
 
-          {/* Quick Stat Chips */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.85rem' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '0.5rem', borderRadius: '6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Row Count</div>
@@ -333,32 +431,14 @@ export default function InvestigationCard({
             </div>
           </div>
 
-          {/* Mini Table Preview */}
-          <div style={{ flex: 1, overflowX: 'auto', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-            {columns.length > 0 && rows.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                <thead>
-                  <tr style={{ background: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                    {columns.slice(0, 4).map((c) => (
-                      <th key={c} style={{ padding: '0.4rem 0.6rem', textAlign: 'left', fontWeight: 600 }}>{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.slice(0, 3).map((r, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', color: '#e2e8f0' }}>
-                      {columns.slice(0, 4).map((c) => (
-                        <td key={c} style={{ padding: '0.4rem 0.6rem' }}>{String(r[c] ?? '')}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                {isSuccess ? 'Empty dataset returned (0 rows)' : 'No execution output'}
-              </div>
-            )}
+          {/* Quick Chart / Data Type Indicator */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: '0.78rem', color: '#cbd5e1', marginBottom: '0.3rem' }}>
+              <strong>Visual Format:</strong> {currentChartSpec?.chart_type ? currentChartSpec.chart_type.toUpperCase() : 'AUTO'}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              {currentChartSpec?.reasoning || 'Chart and tabular views are paired for full verification (Rule R8.2).'}
+            </div>
           </div>
         </div>
       </div>
@@ -366,22 +446,6 @@ export default function InvestigationCard({
       {/* 3. Implementation Detail Layer (Progressive Disclosure Tabs) */}
       <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setActiveTab('table')}
-            style={{
-              background: activeTab === 'table' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
-              color: activeTab === 'table' ? '#818cf8' : '#94a3b8',
-              border: activeTab === 'table' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
-              borderRadius: '6px',
-              padding: '0.4rem 0.8rem',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            📊 Table View ({rowCount})
-          </button>
-
           <button
             onClick={() => setActiveTab('chart')}
             style={{
@@ -393,9 +457,33 @@ export default function InvestigationCard({
               fontSize: '0.82rem',
               fontWeight: 600,
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
             }}
           >
-            📈 Visualization
+            <span>📈</span>
+            <span>Chart View</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('table')}
+            style={{
+              background: activeTab === 'table' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+              color: activeTab === 'table' ? '#818cf8' : '#94a3b8',
+              border: activeTab === 'table' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
+              borderRadius: '6px',
+              padding: '0.4rem 0.8rem',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+            }}
+          >
+            <span>📊</span>
+            <span>Table View ({rowCount})</span>
           </button>
 
           <button
@@ -414,7 +502,8 @@ export default function InvestigationCard({
               gap: '0.35rem',
             }}
           >
-            <span>💻 SQL Code</span>
+            <span>💻</span>
+            <span>SQL Code</span>
             {criticAnalysis?.has_findings && (
               <span style={{ fontSize: '0.7rem', color: '#f59e0b' }}>⚠</span>
             )}
@@ -479,43 +568,154 @@ export default function InvestigationCard({
 
         {/* Tab Content Display */}
         <div style={{ marginTop: '1rem' }}>
-          {/* TAB 1: FULL TABLE VIEW */}
-          {activeTab === 'table' && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Showing {rows.length} rows &bull; Sandboxed Read-Only
-                </span>
+          {/* TAB 1: CHART VIEW (REQ-VIS-01 / Rule R8.2) */}
+          {activeTab === 'chart' && (
+            <div style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '1.25rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              {/* Chart Switcher Controls */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <ChartSwitcher
+                  currentType={currentChartSpec?.chart_type || 'bar'}
+                  suggestedTypes={currentChartSpec?.suggested_chart_types || []}
+                  onSelectType={handleSelectChartType}
+                />
                 <button
-                  onClick={handleCopyCsv}
+                  onClick={() => setActiveTab('table')}
                   style={{
                     background: 'rgba(255, 255, 255, 0.05)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    color: '#e2e8f0',
-                    borderRadius: '4px',
+                    color: '#94a3b8',
                     padding: '0.25rem 0.6rem',
-                    fontSize: '0.75rem',
+                    borderRadius: '4px',
+                    fontSize: '0.72rem',
                     cursor: 'pointer',
                   }}
                 >
-                  📥 Copy as CSV
+                  View as Paired Table (Rule R8.2) &rarr;
                 </button>
               </div>
 
+              {/* Live SVG Chart Rendering */}
+              {isSwitchingChart ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#818cf8' }}>
+                  <span>⏳ Re-rendering chart specification...</span>
+                </div>
+              ) : (
+                <ChartRenderer chartSpec={currentChartSpec} height={300} />
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: FULL TABLE VIEW (WITH SEARCH, SORT, PAGINATION, CSV EXPORT) */}
+          {activeTab === 'table' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Search in table rows..."
+                    value={tableSearch}
+                    onChange={(e) => {
+                      setTableSearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '4px',
+                      padding: '0.3rem 0.6rem',
+                      color: '#f8fafc',
+                      fontSize: '0.78rem',
+                      minWidth: '180px',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                    {processedRows.length} of {rows.length} rows
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    style={{
+                      background: '#1e293b',
+                      color: '#cbd5e1',
+                      border: '1px solid #475569',
+                      borderRadius: '4px',
+                      padding: '0.25rem 0.4rem',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+
+                  <button
+                    onClick={handleCopyCsv}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#e2e8f0',
+                      borderRadius: '4px',
+                      padding: '0.25rem 0.6rem',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📋 Copy CSV
+                  </button>
+
+                  <button
+                    onClick={handleDownloadCsv}
+                    style={{
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      color: '#818cf8',
+                      borderRadius: '4px',
+                      padding: '0.25rem 0.6rem',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📥 Export CSV
+                  </button>
+                </div>
+              </div>
+
               <div style={{ overflowX: 'auto', maxHeight: '350px', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '8px' }}>
-                {columns.length > 0 && rows.length > 0 ? (
+                {columns.length > 0 && paginatedRows.length > 0 ? (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                     <thead>
                       <tr style={{ background: '#1e293b', position: 'sticky', top: 0, borderBottom: '1px solid rgba(255, 255, 255, 0.15)' }}>
                         {columns.map((c) => (
-                          <th key={c} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', color: '#94a3b8', fontWeight: 600 }}>
-                            {c}
+                          <th
+                            key={c}
+                            onClick={() => handleSort(c)}
+                            style={{
+                              padding: '0.5rem 0.75rem',
+                              textAlign: 'left',
+                              color: sortCol === c ? '#818cf8' : '#94a3b8',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <span>{c}</span>
+                              <span style={{ fontSize: '0.65rem' }}>
+                                {sortCol === c ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+                              </span>
+                            </span>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r, idx) => (
+                      {paginatedRows.map((r, idx) => (
                         <tr
                           key={idx}
                           style={{
@@ -534,52 +734,45 @@ export default function InvestigationCard({
                   </table>
                 ) : (
                   <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                    No rows returned from execution.
+                    {tableSearch ? 'No rows match search query.' : 'No rows returned from execution.'}
                   </div>
                 )}
               </div>
-            </div>
-          )}
 
-          {/* TAB 2: VISUALIZATION */}
-          {activeTab === 'chart' && (
-            <div style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '1.5rem', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>
-                  📊 Chart Visualization Preview (Week 10 Foundation)
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#818cf8', background: 'rgba(99, 102, 241, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                  Auto-Selected: {rowCount <= 10 ? 'Bar Chart' : 'Aggregate KPI Grid'}
-                </span>
-              </div>
-              
-              {/* Dynamic KPI Bar representation */}
-              {rows.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {rows.slice(0, 6).map((r, i) => {
-                    const labelKey = columns[0];
-                    const valKey = columns[1] || columns[0];
-                    const rawVal = Number(r[valKey]);
-                    const displayVal = !isNaN(rawVal) ? rawVal : 1;
-                    const maxVal = Math.max(...rows.slice(0, 6).map((row) => Number(row[valKey]) || 1));
-                    const pct = Math.min(100, Math.max(10, Math.round((displayVal / (maxVal || 1)) * 100)));
-
-                    return (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#cbd5e1' }}>
-                          <span>{String(r[labelKey] ?? `Record #${i + 1}`)}</span>
-                          <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>{String(r[valKey] ?? '')}</span>
-                        </div>
-                        <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #6366f1, #818cf8)', borderRadius: '4px' }}></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>
-                  No quantitative data available to visualize.
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  <span>Page {currentPage} of {totalPages}</span>
+                  <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: currentPage === 1 ? '#475569' : '#cbd5e1',
+                        borderRadius: '4px',
+                        padding: '0.2rem 0.5rem',
+                        cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      &larr; Prev
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: currentPage === totalPages ? '#475569' : '#cbd5e1',
+                        borderRadius: '4px',
+                        padding: '0.2rem 0.5rem',
+                        cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Next &rarr;
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -588,7 +781,6 @@ export default function InvestigationCard({
           {/* TAB 3: SQL CODE & CRITIC WARNING */}
           {activeTab === 'sql' && (
             <div>
-              {/* Inline SQL Critic Warning (UI/UX v1.2 §3.5) */}
               {criticAnalysis && criticAnalysis.has_findings && (
                 <div style={{ marginBottom: '1rem' }}>
                   <SQLCriticCard

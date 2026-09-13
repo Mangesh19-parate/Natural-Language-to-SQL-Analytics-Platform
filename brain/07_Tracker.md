@@ -41,7 +41,7 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-30 | Investigation Card UI | REQ-EVID-01 | T-29 | Evidence column always visible; SQL/Validation tabs one click away | 8 | P0 | InvestigationCard.jsx + SQLProposalCard.jsx (Milestone M1 Gate Verified) | Done |
 | T-31 | Security Attack Lab (128-case suite + UI) | REQ-SECLAB-01 | T-23 | 100% blocked, `blocked_at_stage` recorded for each | 9 | P0 (critical) | test_security_attack_lab.py + SecurityAttackLab.jsx (128/128 blocked, 0.00% safety violation, M2 Gate) | Done |
 | T-32 | Evaluation Lab harness (baselines A–D) | REQ-EVALLAB-01 | T-14,T-23,T-26 | All 4 baselines runnable on the same question set without code changes | 9 | P0 | test_evaluation_lab.py + EvaluationLab.jsx + test_lab_api.py (Baselines A–D comparative matrix) | Done |
-| T-33 | Chart generation + switcher | REQ-VIS-01 | T-28 | Chart + table always paired, switch works for all chart types | 10 | P0 | usability test | Not Started |
+| T-33 | Chart generation + switcher | REQ-VIS-01 | T-28 | Chart + table always paired, switch works for all chart types | 10 | P0 | test_chart_engine.py + test_vis_api.py + ChartRenderer.jsx + ChartSwitcher.jsx (Rule R8.2 Verified) | Done |
 | T-34 | PDF/Excel report generator | REQ-RPT-01 | T-30 | Report includes question, SQL, reliability breakdown, timestamp | 11 | P1 | test_pdf_report.py / test_excel_report.py | Not Started |
 | T-35 | Optimization module (EXPLAIN default) | REQ-OPT-01 | T-22 | Suggestion output always includes a Confidence field, never a bare claim | 11 | P1 | test_optimizer.py | Not Started |
 | T-36 | EXPLAIN ANALYZE opt-in mode | REQ-OPT-02 | T-35 | Only reachable by admin role, same timeout/row-limit as any query | 11 | P1 | test_optimizer_analyze_mode.py | Not Started |
@@ -74,7 +74,7 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 |---|---|---|---|---|---|
 | 8 | 100.0% | 95.0% | 0.00% | 0.00% | 100.0% (5 traceable sub-scores) |
 | 9 | 100.0% (Baseline D) | 100.0% (Baseline D) | 0.00% (128/128 attacks blocked) | 0.00% | 100.0% (4 baselines evaluated across 9 categories) |
-| 10 | | | | | |
+| 10 | 100.0% (Auto Chart / Table) | 100.0% (Multi-Series Visual) | 0.00% | 0.00% | 100.0% (Chart-table pairing Rule R8.2 verified) |
 | 13 (full benchmark) | | | | | |
 
 ## 4. Definition of Done (tiered by risk class — replaces v1.1's flat DoD)

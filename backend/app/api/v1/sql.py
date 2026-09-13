@@ -26,6 +26,7 @@ from app.services.sql_critic import SQLCriticService
 from app.services.self_correction import SelfCorrectionService
 from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
+from app.services.chart_engine import ChartEngineService
 
 router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
 
@@ -158,6 +159,7 @@ def _persist_query_reliability(
     status_str: str,
     row_count: int,
     latency_ms: int,
+    chart_type: Optional[str] = None,
 ):
     if not query_id:
         return
@@ -169,6 +171,8 @@ def _persist_query_reliability(
             q_row.status = status_str
             q_row.row_count = row_count
             q_row.execution_ms = latency_ms
+            if chart_type:
+                q_row.chart_type = chart_type
             db.commit()
     except Exception:
         db.rollback()
@@ -183,7 +187,7 @@ async def execute_sandboxed_sql(
     Executes a SQL query within the read-only execution sandbox with timeout and row cap,
     ONLY IF it passes all deterministic Policy Engine gates (Rule R1.1-R1.6),
     with post-execution Result Validation (REQ-RESULT-01), optional Self-Correction,
-    and deterministic Reliability Scoring (REQ-TRUST-01 / Rule R3.3).
+    deterministic Reliability Scoring (REQ-TRUST-01 / Rule R3.3), and Chart Spec generation (REQ-VIS-01).
     """
     policy_res = PolicyEngine.validate_sql(
         db=db,
@@ -241,7 +245,7 @@ async def execute_sandboxed_sql(
         max_rows=request.max_rows,
     )
 
-    # If execution succeeded, perform Result Validation (REQ-RESULT-01)
+    # If execution succeeded, perform Result Validation (REQ-RESULT-01) and Chart Generation (REQ-VIS-01)
     if sandbox_res.success:
         validation_report = ResultValidatorService.validate_results(
             db=db,
@@ -263,8 +267,13 @@ async def execute_sandboxed_sql(
             latency_ms=sandbox_res.latency_ms,
             execution_success=True,
         )
+        chart_spec = ChartEngineService.infer_chart_spec(
+            columns=sandbox_res.columns,
+            rows=sandbox_res.rows,
+            question=request.question,
+        )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms
+            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value
         )
         return SQLExecuteResponse(
             success=True,
@@ -279,6 +288,7 @@ async def execute_sandboxed_sql(
             critic_analysis=critic_res,
             result_validation=validation_report,
             reliability_breakdown=reliability,
+            chart_spec=chart_spec,
         )
 
     # If execution failed, classify error
@@ -325,8 +335,13 @@ async def execute_sandboxed_sql(
                     latency_ms=repaired_exec.latency_ms,
                     execution_success=True,
                 )
+                repaired_chart_spec = ChartEngineService.infer_chart_spec(
+                    columns=repaired_exec.columns,
+                    rows=repaired_exec.rows,
+                    question=request.question,
+                )
                 _persist_query_reliability(
-                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms
+                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms, repaired_chart_spec.chart_type.value
                 )
                 return SQLExecuteResponse(
                     success=True,
@@ -342,6 +357,7 @@ async def execute_sandboxed_sql(
                     correction_result=correction_res,
                     result_validation=val_rep,
                     reliability_breakdown=reliability,
+                    chart_spec=repaired_chart_spec,
                 )
 
     reliability = ReliabilityScorerService.compute_reliability_score(

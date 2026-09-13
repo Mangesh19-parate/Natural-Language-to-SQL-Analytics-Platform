@@ -3,6 +3,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from app.schemas.policy import PolicyValidationResult
 from app.schemas.reliability import ReliabilityBreakdown
+from app.schemas.visualization import ChartSpec
 
 
 class CriticFindingType(str, Enum):
@@ -177,5 +178,6 @@ class SQLExecuteResponse(BaseModel):
     correction_result: Optional[SelfCorrectionResult] = None
     result_validation: Optional[ResultValidationReport] = None
     reliability_breakdown: Optional[ReliabilityBreakdown] = None
+    chart_spec: Optional[ChartSpec] = None
 
 
