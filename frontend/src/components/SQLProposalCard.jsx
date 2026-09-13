@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import SQLCriticCard from './SQLCriticCard.jsx';
+import SelfCorrectionCard from './SelfCorrectionCard.jsx';
+import ResultValidationCard from './ResultValidationCard.jsx';
 
 export default function SQLProposalCard({
   question,
@@ -65,10 +67,15 @@ export default function SQLProposalCard({
           data_source_id: 1,
           timeout_seconds: 10.0,
           max_rows: 10000,
+          auto_correct: true,
+          question: targetQuestion,
         }),
       });
       const data = await res.json();
       setExecutionResult(data);
+      if (data.correction_result?.recovered && data.correction_result?.final_sql) {
+        setActiveSql(data.correction_result.final_sql);
+      }
     } catch (err) {
       setExecutionResult({ success: false, error: err.message });
     } finally {
@@ -90,7 +97,7 @@ export default function SQLProposalCard({
         <div>
           <h4 style={{ margin: 0, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem' }}>
             <span>⚡</span>
-            <span>Weeks 4–6: SQL Proposal &bull; Policy Gate &bull; SQL Critic</span>
+            <span>Weeks 4–7: SQL Proposal &bull; Policy Gate &bull; SQL Critic &bull; Self-Correction</span>
           </h4>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             Principle: <em>"The LLM proposes. Deterministic infrastructure authorizes, critiques, executes, and verifies."</em>
@@ -266,6 +273,21 @@ export default function SQLProposalCard({
                 {isExecuting ? 'Executing in Sandbox...' : '▶ Execute in Read-Only Sandbox (T-22)'}
               </button>
             </div>
+          )}
+
+          {/* Self-Correction Feedback Loop UI (Week 7 / Task T-26, T-27) */}
+          {executionResult?.correction_result && (
+            <SelfCorrectionCard
+              correctionResult={executionResult.correction_result}
+              onApplyRepairedSql={handleApplyFix}
+            />
+          )}
+
+          {/* Result Sanity Checks Card (Week 7 / Task T-28 / REQ-RESULT-01) */}
+          {executionResult?.result_validation && (
+            <ResultValidationCard
+              validationReport={executionResult.result_validation}
+            />
           )}
 
           {/* Sandbox Execution Result Table */}

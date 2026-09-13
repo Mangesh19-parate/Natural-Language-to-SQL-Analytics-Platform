@@ -118,9 +118,9 @@ export default function App() {
             <span className="logo-dot"></span>
             <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
-          <h1 className="title">Week 6: SQL Critic Semantic-Smell Engine &amp; Advisory UI</h1>
+          <h1 className="title">Week 7: Self-Correction Loop &amp; Result Sanity Validator</h1>
           <p className="subtitle">
-            AST-level semantic analysis &bull; Identifier aggregation guards &bull; Actionable suggested fixes &bull; Advisory findings persistence
+            E1–E7 error taxonomy &bull; E5 non-retry routing (Rule R4.2) &bull; Repair diffs &bull; Post-execution sanity checks (REQ-RESULT-01)
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -150,7 +150,7 @@ export default function App() {
               Phase 1 &bull; P0 Critical Gate
             </span>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Week 6 / Day 42 Gate
+              Week 7 / Day 49 Gate
             </div>
           </div>
         </div>
@@ -163,20 +163,20 @@ export default function App() {
             <span className="status-indicator"></span>
             <span>Deterministic Trust &amp; Safety Boundary</span>
           </div>
-          <span className="badge badge-done">Weeks 1-6 Complete Gate</span>
+          <span className="badge badge-done">Weeks 1-7 Complete Gate</span>
         </div>
         <div className="stats-grid">
           <div className="stat-row">
-            <span className="stat-label">Policy Engine (T-15..T-23)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (100% Block Rate)</span>
+            <span className="stat-label">Self-Correction (T-26)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (E1–E4, E6 Max 3)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">SQL Critic Engine (T-24)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (&ge;85% Smell Catch)</span>
+            <span className="stat-label">E5 Auth Routing (T-27)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Strict Non-Retry (R4.2)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">Critic UI Actions (T-25)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Advisory Card (R3.1)</span>
+            <span className="stat-label">Result Validator (T-28)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Active (REQ-RESULT-01)</span>
           </div>
           <div className="stat-row">
             <span className="stat-label">Execution Sandbox (T-22)</span>
@@ -351,12 +351,22 @@ export default function App() {
       <div className="card" style={{ marginTop: '2rem' }}>
         <div className="card-header">
           <div className="card-title">
-            <span>Automated Test Verification Matrix (Weeks 1 through 6 Complete Suite)</span>
+            <span>Automated Test Verification Matrix (Weeks 1 through 7 Complete Suite)</span>
           </div>
-          <span className="badge badge-done">50 / 50 Passing (100%)</span>
+          <span className="badge badge-done">60 / 60 Passing (100%)</span>
         </div>
         <div className="code-box">
-{`tests/unit/test_sql_critic.py::test_sql_critic_catch_rate_on_20_smells               [PASSED] (T-24 >=85% Benchmark Catch Rate)
+{`tests/unit/test_self_correction.py::test_e1_to_e7_error_classification               [PASSED] (T-26 E1-E7 Error Taxonomy)
+tests/unit/test_self_correction.py::test_e5_authorization_never_retried              [PASSED] (T-27 Rule R4.2 Strict Non-Retry Gate)
+tests/unit/test_self_correction.py::test_self_correction_e1_syntax_repair           [PASSED] (T-26 Syntax Repair Loop)
+tests/unit/test_self_correction.py::test_self_correction_e2_schema_reference_repair [PASSED] (T-26 Schema Reference Repair Loop)
+tests/unit/test_result_validator.py::test_zero_row_detection                         [PASSED] (T-28 REQ-RESULT-01 Zero-Row Check)
+tests/unit/test_result_validator.py::test_null_explosion_detection                   [PASSED] (T-28 REQ-RESULT-01 NULL-Explosion Guard)
+tests/unit/test_result_validator.py::test_cardinality_outlier_detection              [PASSED] (T-28 REQ-RESULT-01 Cardinality Outlier)
+tests/unit/test_result_validator.py::test_result_validation_persistence             [PASSED] (T-28 result_validation DB Persistence)
+tests/integration/test_correction_api.py::test_api_self_correct_endpoint             [PASSED] (T-26 POST /api/sql/correct API)
+tests/integration/test_correction_api.py::test_api_validate_results_endpoint        [PASSED] (T-28 POST /api/sql/validate-results API)
+tests/unit/test_sql_critic.py::test_sql_critic_catch_rate_on_20_smells               [PASSED] (T-24 >=85% Benchmark Catch Rate)
 tests/unit/test_sql_critic.py::test_sql_critic_zero_false_positives_on_legitimate_queries [PASSED] (T-24 0% False Positive Guarantee)
 tests/unit/test_sql_critic.py::test_suggested_sql_generation                         [PASSED] (T-24 Suggested SQL AST Rewriter)
 tests/integration/test_critic_api.py::test_api_critic_endpoint                       [PASSED] (T-25 POST /api/sql/critic API)
