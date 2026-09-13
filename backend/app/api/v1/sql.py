@@ -1,6 +1,8 @@
+from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db, business_engine
+from app.models.session import QueryHistory
 from app.schemas.query import (
     SQLGenerateRequest,
     SQLGenerateResponse,
@@ -23,6 +25,7 @@ from app.services.execution_sandbox import ExecutionSandboxService
 from app.services.sql_critic import SQLCriticService
 from app.services.self_correction import SelfCorrectionService
 from app.services.result_validator import ResultValidatorService
+from app.services.reliability_scorer import ReliabilityScorerService
 
 router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
 
@@ -147,6 +150,30 @@ async def validate_query_results(
     return report
 
 
+def _persist_query_reliability(
+    db: Session,
+    query_id: Optional[str],
+    reliability_dict: Dict[str, Any],
+    final_sql: str,
+    status_str: str,
+    row_count: int,
+    latency_ms: int,
+):
+    if not query_id:
+        return
+    try:
+        q_row = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+        if q_row:
+            q_row.reliability_breakdown = reliability_dict
+            q_row.final_sql = final_sql
+            q_row.status = status_str
+            q_row.row_count = row_count
+            q_row.execution_ms = latency_ms
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
 @router.post("/execute", response_model=SQLExecuteResponse)
 async def execute_sandboxed_sql(
     request: SQLExecuteRequest,
@@ -155,7 +182,8 @@ async def execute_sandboxed_sql(
     """
     Executes a SQL query within the read-only execution sandbox with timeout and row cap,
     ONLY IF it passes all deterministic Policy Engine gates (Rule R1.1-R1.6),
-    with post-execution Result Validation (REQ-RESULT-01) and optional Self-Correction.
+    with post-execution Result Validation (REQ-RESULT-01), optional Self-Correction,
+    and deterministic Reliability Scoring (REQ-TRUST-01 / Rule R3.3).
     """
     policy_res = PolicyEngine.validate_sql(
         db=db,
@@ -169,6 +197,19 @@ async def execute_sandboxed_sql(
             "; ".join([v.message for v in policy_res.violations]),
             is_policy_rejection=True,
         )
+        reliability = ReliabilityScorerService.compute_reliability_score(
+            db=db,
+            sql=request.sql,
+            role_id=request.role_id,
+            data_source_id=request.data_source_id,
+            policy_validation=policy_res,
+            execution_success=False,
+            row_count=0,
+            latency_ms=0,
+        )
+        _persist_query_reliability(
+            db, request.query_id, reliability.model_dump(), request.sql, "rejected_policy", 0, 0
+        )
         return SQLExecuteResponse(
             success=False,
             sql=request.sql,
@@ -181,6 +222,7 @@ async def execute_sandboxed_sql(
             policy_validation=policy_res,
             error=f"Query rejected by Policy Engine: {'; '.join([v.message for v in policy_res.violations])}",
             error_type=error_type,
+            reliability_breakdown=reliability,
         )
 
     # Use injected SQL (with active row filters) for execution
@@ -209,6 +251,21 @@ async def execute_sandboxed_sql(
             row_count=sandbox_res.row_count,
             query_id=request.query_id,
         )
+        reliability = ReliabilityScorerService.compute_reliability_score(
+            db=db,
+            sql=execution_sql,
+            role_id=request.role_id,
+            data_source_id=request.data_source_id,
+            policy_validation=policy_res,
+            critic_analysis=critic_res,
+            result_validation=validation_report,
+            row_count=sandbox_res.row_count,
+            latency_ms=sandbox_res.latency_ms,
+            execution_success=True,
+        )
+        _persist_query_reliability(
+            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms
+        )
         return SQLExecuteResponse(
             success=True,
             sql=request.sql,
@@ -221,6 +278,7 @@ async def execute_sandboxed_sql(
             policy_validation=policy_res,
             critic_analysis=critic_res,
             result_validation=validation_report,
+            reliability_breakdown=reliability,
         )
 
     # If execution failed, classify error
@@ -254,6 +312,22 @@ async def execute_sandboxed_sql(
                     row_count=repaired_exec.row_count,
                     query_id=request.query_id,
                 )
+                reliability = ReliabilityScorerService.compute_reliability_score(
+                    db=db,
+                    sql=correction_res.final_sql,
+                    role_id=request.role_id,
+                    data_source_id=request.data_source_id,
+                    policy_validation=policy_res,
+                    critic_analysis=critic_res,
+                    correction_result=correction_res,
+                    result_validation=val_rep,
+                    row_count=repaired_exec.row_count,
+                    latency_ms=repaired_exec.latency_ms,
+                    execution_success=True,
+                )
+                _persist_query_reliability(
+                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms
+                )
                 return SQLExecuteResponse(
                     success=True,
                     sql=request.sql,
@@ -267,8 +341,24 @@ async def execute_sandboxed_sql(
                     critic_analysis=critic_res,
                     correction_result=correction_res,
                     result_validation=val_rep,
+                    reliability_breakdown=reliability,
                 )
 
+    reliability = ReliabilityScorerService.compute_reliability_score(
+        db=db,
+        sql=execution_sql,
+        role_id=request.role_id,
+        data_source_id=request.data_source_id,
+        policy_validation=policy_res,
+        critic_analysis=critic_res,
+        correction_result=correction_res,
+        row_count=0,
+        latency_ms=sandbox_res.latency_ms,
+        execution_success=False,
+    )
+    _persist_query_reliability(
+        db, request.query_id, reliability.model_dump(), execution_sql, "failed", 0, sandbox_res.latency_ms
+    )
     return SQLExecuteResponse(
         success=False,
         sql=request.sql,
@@ -283,5 +373,7 @@ async def execute_sandboxed_sql(
         error=sandbox_res.error,
         error_type=err_type,
         correction_result=correction_res,
+        reliability_breakdown=reliability,
     )
+
 

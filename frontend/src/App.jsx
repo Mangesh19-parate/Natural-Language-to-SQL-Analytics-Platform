@@ -118,9 +118,9 @@ export default function App() {
             <span className="logo-dot"></span>
             <span>Intelligent SQL Assistant &bull; Trust Engine</span>
           </div>
-          <h1 className="title">Week 7: Self-Correction Loop &amp; Result Sanity Validator</h1>
+          <h1 className="title">Week 8: Reliability Scorer &amp; Investigation Card</h1>
           <p className="subtitle">
-            E1–E7 error taxonomy &bull; E5 non-retry routing (Rule R4.2) &bull; Repair diffs &bull; Post-execution sanity checks (REQ-RESULT-01)
+            5-stage deterministic scoring &bull; REQ-TRUST-01 (Rule R3.3) &bull; Investigation Card Evidence Panel &bull; REQ-EVID-01 &bull; Milestone M1 Gate
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -147,10 +147,10 @@ export default function App() {
 
           <div style={{ textAlign: 'right' }}>
             <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
-              Phase 1 &bull; P0 Critical Gate
+              Milestone M1 &bull; Core Complete
             </span>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Week 7 / Day 49 Gate
+            <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
+              Week 8 / Day 56 Gate Passed
             </div>
           </div>
         </div>
@@ -161,26 +161,26 @@ export default function App() {
         <div className="card-header">
           <div className="card-title">
             <span className="status-indicator"></span>
-            <span>Deterministic Trust &amp; Safety Boundary</span>
+            <span>Deterministic Trust &amp; Evidence Engine (Milestone M1)</span>
           </div>
-          <span className="badge badge-done">Weeks 1-7 Complete Gate</span>
+          <span className="badge badge-done">Milestone M1 Core Verified</span>
         </div>
         <div className="stats-grid">
           <div className="stat-row">
-            <span className="stat-label">Self-Correction (T-26)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (E1–E4, E6 Max 3)</span>
+            <span className="stat-label">Reliability Scorer (T-29)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>5 Sub-Scores (Rule R3.3)</span>
           </div>
           <div className="stat-row">
-            <span className="stat-label">E5 Auth Routing (T-27)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Strict Non-Retry (R4.2)</span>
+            <span className="stat-label">Investigation Card (T-30)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>Evidence Panel Active</span>
+          </div>
+          <div className="stat-row">
+            <span className="stat-label">Self-Correction (T-26/27)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>E1–E7 Taxonomy Active</span>
           </div>
           <div className="stat-row">
             <span className="stat-label">Result Validator (T-28)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Active (REQ-RESULT-01)</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Execution Sandbox (T-22)</span>
-            <span className="stat-value" style={{ color: '#10b981' }}>Read-Only (10s / 10k cap)</span>
+            <span className="stat-value" style={{ color: '#10b981' }}>4 Anomaly Checks Active</span>
           </div>
         </div>
       </div>

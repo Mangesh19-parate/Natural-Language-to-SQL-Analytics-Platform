@@ -8,6 +8,7 @@ from app.services.prompt_builder import CatalogPromptBuilder
 from app.services.llm_provider import LLMProviderService
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_critic import SQLCriticService
+from app.services.reliability_scorer import ReliabilityScorerService
 
 
 class SQLGeneratorService:
@@ -59,6 +60,7 @@ class SQLGeneratorService:
         3. Invokes LLM.
         4. Validates proposed SQL against deterministic Policy Engine.
         5. Evaluates semantic smells with SQL Critic.
+        6. Computes initial pre-execution Reliability Score (REQ-TRUST-01).
         """
         # Step 1: Policy-filtered catalog
         catalog = SemanticCatalogService.get_catalog_for_role(db, data_source_id=data_source_id, role_id=role_id)
@@ -99,6 +101,20 @@ class SQLGeneratorService:
                 sql=policy_result.injected_sql or proposed_sql,
             )
 
+        # Step 6: Initial Pre-execution Reliability Scoring (Week 8 / Task T-29 / Rule R3.3)
+        reliability = ReliabilityScorerService.compute_reliability_score(
+            db=db,
+            sql=proposed_sql,
+            role_id=role_id,
+            data_source_id=data_source_id,
+            policy_validation=policy_result,
+            critic_analysis=critic_analysis,
+            clarifications=clarifications,
+            execution_success=policy_result.is_allowed,
+            row_count=0,
+            latency_ms=0,
+        )
+
         rejection_reasons = [v.message for v in policy_result.violations]
 
         return SQLGenerateResponse(
@@ -106,6 +122,7 @@ class SQLGeneratorService:
             proposal=proposal,
             policy_validation=policy_result,
             critic_analysis=critic_analysis,
+            reliability_breakdown=reliability,
             can_execute=policy_result.is_allowed,
             rejection_reasons=rejection_reasons,
         )

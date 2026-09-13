@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 from app.schemas.policy import PolicyValidationResult
+from app.schemas.reliability import ReliabilityBreakdown
 
 
 class CriticFindingType(str, Enum):
@@ -49,6 +50,7 @@ class SQLGenerateResponse(BaseModel):
     proposal: SQLProposal
     policy_validation: PolicyValidationResult
     critic_analysis: Optional[CriticAnalysisResult] = None
+    reliability_breakdown: Optional[ReliabilityBreakdown] = None
     can_execute: bool
     rejection_reasons: List[str] = Field(default_factory=list)
 
@@ -174,4 +176,6 @@ class SQLExecuteResponse(BaseModel):
     error_type: Optional[ErrorTaxonomyType] = None
     correction_result: Optional[SelfCorrectionResult] = None
     result_validation: Optional[ResultValidationReport] = None
+    reliability_breakdown: Optional[ReliabilityBreakdown] = None
+
 

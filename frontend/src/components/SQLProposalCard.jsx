@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SQLCriticCard from './SQLCriticCard.jsx';
 import SelfCorrectionCard from './SelfCorrectionCard.jsx';
 import ResultValidationCard from './ResultValidationCard.jsx';
+import InvestigationCard from './InvestigationCard.jsx';
 
 export default function SQLProposalCard({
   question,
@@ -275,61 +276,15 @@ export default function SQLProposalCard({
             </div>
           )}
 
-          {/* Self-Correction Feedback Loop UI (Week 7 / Task T-26, T-27) */}
-          {executionResult?.correction_result && (
-            <SelfCorrectionCard
-              correctionResult={executionResult.correction_result}
-              onApplyRepairedSql={handleApplyFix}
+          {/* Week 8: Investigation Card & Evidence Panel (REQ-EVID-01 / REQ-TRUST-01) */}
+          {(executionResult || sqlProposalData) && (
+            <InvestigationCard
+              question={targetQuestion}
+              sql={activeSql || sqlProposalData.proposal?.sql}
+              executionResult={executionResult}
+              proposalData={sqlProposalData}
+              onApplyFix={handleApplyFix}
             />
-          )}
-
-          {/* Result Sanity Checks Card (Week 7 / Task T-28 / REQ-RESULT-01) */}
-          {executionResult?.result_validation && (
-            <ResultValidationCard
-              validationReport={executionResult.result_validation}
-            />
-          )}
-
-          {/* Sandbox Execution Result Table */}
-          {executionResult && (
-            <div style={{ background: '#0a0f1d', border: '1px solid #1e293b', borderRadius: '8px', padding: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <span style={{ fontWeight: 600, fontSize: '0.88rem', color: executionResult.success ? '#34d399' : '#f87171' }}>
-                  {executionResult.success ? '✅ Execution Successful' : '❌ Execution Error'}
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                  Rows: {executionResult.row_count} &bull; Latency: {executionResult.latency_ms}ms
-                </span>
-              </div>
-
-              {executionResult.rows?.length > 0 && (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8' }}>
-                        {executionResult.columns.map((c, i) => (
-                          <th key={i} style={{ padding: '0.4rem 0.6rem' }}>{c}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {executionResult.rows.slice(0, 10).map((r, ri) => (
-                        <tr key={ri} style={{ borderBottom: '1px solid #1e293b' }}>
-                          {executionResult.columns.map((c, ci) => (
-                            <td key={ci} style={{ padding: '0.4rem 0.6rem', color: '#e2e8f0' }}>{String(r[c])}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {executionResult.rows.length > 10 && (
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.5rem' }}>
-                      Showing first 10 of {executionResult.row_count} rows.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           )}
         </div>
       )}
