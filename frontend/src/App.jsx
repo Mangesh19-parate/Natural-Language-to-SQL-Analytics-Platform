@@ -116,15 +116,26 @@ export default function App() {
     <div className="container">
       {/* Header */}
       <header className="header">
-        <div>
-          <div className="logo-badge">
-            <span className="logo-dot"></span>
-            <span>Intelligent SQL Assistant &bull; Trust Engine</span>
+        <div className="logo-section" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div className="logo-badge" style={{ fontSize: '1.3rem' }}>
+            ⚡
           </div>
-          <h1 className="title">Week 9: Security Attack &amp; Evaluation Labs</h1>
-          <p className="subtitle">
-            128-Attack Adversarial Suite (T-31) &bull; 4-Baseline Benchmark Harness (T-32) &bull; Milestone M2 Hard Gate Passed (0.00% Safety Violations)
-          </p>
+          <div className="title-group">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Intelligent SQL Assistant &bull; Trust Engine
+              </span>
+              <span style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
+                v1.2.0
+              </span>
+            </div>
+            <h1 className="title" style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 0.2rem 0', color: '#f8fafc' }}>
+              Natural-Language Analytics Platform
+            </h1>
+            <p className="subtitle" style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+              Deterministic Verification &bull; 128-Attack Security Lab (T-31) &bull; Evaluation Benchmark (T-32) &bull; Visualization Engine (T-33)
+            </p>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {/* Active Role Selector */}
