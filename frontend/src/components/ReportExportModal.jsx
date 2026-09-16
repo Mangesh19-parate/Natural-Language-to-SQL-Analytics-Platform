@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function ReportExportModal({
   isOpen,
@@ -44,7 +45,7 @@ export default function ReportExportModal({
       };
 
       const endpoint = format === 'pdf' ? '/api/report/pdf' : '/api/report/excel';
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -60,7 +61,7 @@ export default function ReportExportModal({
       // Trigger download
       const downloadUrl = reportData.download_url;
       if (downloadUrl) {
-        const dlRes = await fetch(downloadUrl);
+        const dlRes = await apiFetch(downloadUrl);
         const blob = await dlRes.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

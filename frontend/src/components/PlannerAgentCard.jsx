@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../utils/api.js';
 import {
   Workflow,
   Sparkles,
@@ -44,7 +45,7 @@ export default function PlannerAgentCard({
     setPlanResult(null);
 
     try {
-      const res = await fetch('/api/agent/execute', {
+      const res = await apiFetch('/api/agent/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

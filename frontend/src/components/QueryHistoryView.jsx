@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activeRoleId = 1 }) {
   const [historyItems, setHistoryItems] = useState([]);
@@ -19,7 +20,7 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
       if (statusFilter) url += `&status=${statusFilter}`;
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
 
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       if (data?.success) {
         setHistoryItems(data.data.items);
@@ -49,7 +50,7 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
     setRerunningId(item.query_id);
     setRerunFeedback(null);
     try {
-      const res = await fetch(`/api/history/${item.query_id}/rerun`, {
+      const res = await apiFetch(`/api/history/${item.query_id}/rerun`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,7 +95,7 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
   const handleDelete = async (queryId) => {
     if (!window.confirm('Delete this history record?')) return;
     try {
-      const res = await fetch(`/api/history/${queryId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/history/${queryId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data?.success) {
         setHistoryItems(historyItems.filter((i) => i.query_id !== queryId));

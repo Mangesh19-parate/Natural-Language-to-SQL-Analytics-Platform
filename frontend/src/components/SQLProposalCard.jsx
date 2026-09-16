@@ -3,6 +3,7 @@ import SQLCriticCard from './SQLCriticCard.jsx';
 import SelfCorrectionCard from './SelfCorrectionCard.jsx';
 import ResultValidationCard from './ResultValidationCard.jsx';
 import InvestigationCard from './InvestigationCard.jsx';
+import { apiFetch } from '../utils/api.js';
 
 export default function SQLProposalCard({
   question,
@@ -28,7 +29,7 @@ export default function SQLProposalCard({
     setExecutionResult(null);
 
     try {
-      const res = await fetch('/api/sql/generate', {
+      const res = await apiFetch('/api/sql/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -59,7 +60,7 @@ export default function SQLProposalCard({
     setIsExecuting(true);
 
     try {
-      const res = await fetch('/api/sql/execute', {
+      const res = await apiFetch('/api/sql/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

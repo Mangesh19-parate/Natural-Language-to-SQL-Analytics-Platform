@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 1, onPolicyChange }) {
   const [selectedRole, setSelectedRole] = useState(activeRoleId);
@@ -23,7 +24,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/policy/matrix?role_id=${roleId}&data_source_id=1`);
+      const res = await apiFetch(`/api/policy/matrix?role_id=${roleId}&data_source_id=1`);
       const data = await res.json();
       if (data?.success) {
         setMatrixData(data.data);
@@ -73,7 +74,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
         row_filter_sql: formRowFilter.trim() ? formRowFilter.trim() : null,
       };
 
-      const res = await fetch('/api/policy', {
+      const res = await apiFetch('/api/policy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -97,7 +98,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
     if (!policyId) return;
     if (!window.confirm('Revert this rule to fail-closed DENIED BY DEFAULT?')) return;
     try {
-      const res = await fetch(`/api/policy/${policyId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/policy/${policyId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data?.success) {
         setEditingPolicy(null);

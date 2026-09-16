@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function PolicyValidatorSandbox({ roleId }) {
   const [customSql, setCustomSql] = useState('SELECT employee_id, first_name, salary FROM employees;');
@@ -20,7 +21,7 @@ export default function PolicyValidatorSandbox({ roleId }) {
 
     setIsValidating(true);
     try {
-      const res = await fetch('/api/sql/validate', {
+      const res = await apiFetch('/api/sql/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

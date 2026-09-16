@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function OptimizationCard({
   sql,
@@ -18,7 +19,7 @@ export default function OptimizationCard({
     setError(null);
     try {
       const endpoint = targetMode === 'explain_analyze' ? '/api/optimize/analyze' : '/api/optimize/explain';
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

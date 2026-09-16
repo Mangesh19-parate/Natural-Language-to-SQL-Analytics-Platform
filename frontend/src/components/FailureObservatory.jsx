@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../utils/api.js';
 import {
   AlertTriangle,
   Flame,
@@ -96,9 +97,9 @@ export default function FailureObservatory({ activeRole = 'admin' }) {
     try {
       const headers = { 'X-User-Role': activeRole };
       const [statsRes, phrasesRes, logsRes] = await Promise.all([
-        fetch('/api/observatory/stats', { headers }),
-        fetch('/api/observatory/phrases', { headers }),
-        fetch('/api/observatory/logs?limit=50', { headers })
+        apiFetch('/api/observatory/stats', { headers }),
+        apiFetch('/api/observatory/phrases', { headers }),
+        apiFetch('/api/observatory/logs?limit=50', { headers })
       ]);
 
       if (!statsRes.ok || !phrasesRes.ok || !logsRes.ok) {

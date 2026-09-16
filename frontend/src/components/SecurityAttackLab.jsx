@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function SecurityAttackLab({ selectedRole = 1 }) {
   const [isRunning, setIsRunning] = useState(false);
@@ -15,7 +16,7 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
 
   const fetchLatestAttackRun = async () => {
     try {
-      const res = await fetch('/api/lab/security/latest');
+      const res = await apiFetch('/api/lab/security/latest');
       const data = await res.json();
       if (data.success && data.data) {
         setAttackData(data.data);
@@ -33,7 +34,7 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
   const runAttackSuite = async () => {
     setIsRunning(true);
     try {
-      const res = await fetch('/api/lab/security/run', {
+      const res = await apiFetch('/api/lab/security/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

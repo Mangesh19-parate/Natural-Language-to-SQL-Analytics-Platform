@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api.js';
 
 export default function EvaluationLab() {
   const [isRunning, setIsRunning] = useState(false);
@@ -13,7 +14,7 @@ export default function EvaluationLab() {
 
   const fetchLatestEvaluationRun = async () => {
     try {
-      const res = await fetch('/api/lab/evaluation/latest');
+      const res = await apiFetch('/api/lab/evaluation/latest');
       const data = await res.json();
       if (data.success && data.data) {
         setEvalData(data.data);
@@ -30,7 +31,7 @@ export default function EvaluationLab() {
   const runBenchmark = async () => {
     setIsRunning(true);
     try {
-      const res = await fetch('/api/lab/evaluation/run', {
+      const res = await apiFetch('/api/lab/evaluation/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

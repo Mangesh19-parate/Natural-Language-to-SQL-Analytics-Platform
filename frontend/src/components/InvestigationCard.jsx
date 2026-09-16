@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiFetch } from '../utils/api.js';
 import SQLCriticCard from './SQLCriticCard.jsx';
 import SelfCorrectionCard from './SelfCorrectionCard.jsx';
 import ResultValidationCard from './ResultValidationCard.jsx';
@@ -98,7 +99,7 @@ export default function InvestigationCard({
     if (!columns.length || !rows.length) return;
     setIsSwitchingChart(true);
     try {
-      const res = await fetch('/api/vis/generate-chart', {
+      const res = await apiFetch('/api/vis/generate-chart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -13,6 +13,8 @@ import VoiceInputButton from './components/VoiceInputButton.jsx';
 import PlannerAgentCard from './components/PlannerAgentCard.jsx';
 import AuthModal from './components/AuthModal.jsx';
 
+import { apiFetch } from './utils/api.js';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'planner' | 'history' | 'policy' | 'replay' | 'security' | 'evaluation' | 'observatory'
   const [health, setHealth] = useState({
@@ -20,7 +22,7 @@ export default function App() {
     environment: 'local',
     metadata_db_connected: false,
     business_db_connected: false,
-    version: '1.4.0',
+    version: '1.2.0',
   });
   const [catalog, setCatalog] = useState(null);
   const [selectedRole, setSelectedRole] = useState(1); // 1: admin, 2: analyst, 3: viewer
@@ -37,15 +39,37 @@ export default function App() {
   const [resolvedQuestion, setResolvedQuestion] = useState(null);
   const [isResolving, setIsResolving] = useState(false);
 
+  // Auto-login to obtain active Bearer JWT token on startup if none exists
   useEffect(() => {
-    fetch('/api/health')
+    if (!localStorage.getItem('access_token')) {
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'admin@trustengine.ai', password: 'AdminPass123!' }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success) {
+            localStorage.setItem('access_token', data.data.access_token);
+            localStorage.setItem('refresh_token', data.data.refresh_token);
+            localStorage.setItem('auth_role_name', 'admin');
+            localStorage.setItem('auth_role_id', '1');
+            localStorage.setItem('auth_user_email', 'admin@trustengine.ai');
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    apiFetch('/api/health')
       .then((res) => res.json())
       .then((data) => setHealth(data))
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    fetch(`/api/schema?role_id=${selectedRole}`)
+    apiFetch(`/api/schema?role_id=${selectedRole}`)
       .then((res) => res.json())
       .then((res) => setCatalog(res.data))
       .catch(() => {});
@@ -82,7 +106,7 @@ export default function App() {
     setResolvedQuestion(null);
 
     try {
-      const res = await fetch('/api/intent/classify', {
+      const res = await apiFetch('/api/intent/classify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,7 +138,7 @@ export default function App() {
 
     setIsResolving(true);
     try {
-      const res = await fetch('/api/intent/resolve', {
+      const res = await apiFetch('/api/intent/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
