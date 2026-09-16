@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.db.session import get_db
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
-from app.models.auth import Role
 from scripts.seed_business_db import seed_business_database
+from tests.conftest import create_test_auth_headers
 
 client = TestClient(app)
 
@@ -17,10 +17,13 @@ def seed_load_test_data(db_session: Session):
     seed_business_database()
     app.dependency_overrides[get_db] = lambda: db_session
 
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     ds = DataSource(name="Load Test DB", db_type="postgresql", secret_ref="env:TEST_SECRET", is_active=True)
-    role_admin = Role(role_name="admin")
-    db_session.add_all([ds, role_admin])
+    db_session.add(ds)
     db_session.flush()
+
+    from app.models.auth import Role
+    role_admin = db_session.query(Role).filter(Role.role_name == "admin").first()
 
     tables = ["customers", "departments", "employees", "products", "orders", "sales"]
     for t in tables:
@@ -34,6 +37,7 @@ def seed_load_test_data(db_session: Session):
         "db": db_session,
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -44,6 +48,7 @@ def test_50_concurrent_requests_load_performance(seed_load_test_data: dict):
     Simulates 50 pipeline requests verifying database connection resilience
     and latency performance SLAs (Task T-46).
     """
+    headers = seed_load_test_data["headers"]
     total_requests = 50
     endpoints = [
         ("GET", "/api/health", None),
@@ -68,9 +73,9 @@ def test_50_concurrent_requests_load_performance(seed_load_test_data: dict):
         method, path, body = endpoints[i % len(endpoints)]
         start = time.perf_counter()
         if method == "GET":
-            res = client.get(path)
+            res = client.get(path, headers=headers)
         else:
-            res = client.post(path, json=body)
+            res = client.post(path, json=body, headers=headers)
         latency = (time.perf_counter() - start) * 1000
         status_codes.append(res.status_code)
         latencies.append(latency)

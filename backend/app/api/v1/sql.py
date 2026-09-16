@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db, business_engine
 from app.models.session import QueryHistory
+from app.models.auth import User
 from app.schemas.query import (
     SQLGenerateRequest,
     SQLGenerateResponse,
@@ -18,6 +19,7 @@ from app.schemas.query import (
     ResultValidationReport,
     ErrorTaxonomyType,
 )
+from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
@@ -34,18 +36,20 @@ router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
 @router.post("/generate", response_model=SQLGenerateResponse)
 async def generate_sql_proposal(
     request: SQLGenerateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Generates a SQL query proposal via LLM provider using the role's Semantic Catalog,
+    Generates a SQL query proposal via LLM provider using the authenticated user's Semantic Catalog,
     and subjects it to deterministic AST & Policy Engine validation (Principle R0)
     and SQL Critic semantic-smell analysis (Rule R3.1).
     """
+    effective_role_id = get_effective_role_id(current_user, request.role_id)
     generator = SQLGeneratorService()
     response = await generator.generate_sql_proposal(
         db=db,
         question=request.question,
-        role_id=request.role_id,
+        role_id=effective_role_id,
         data_source_id=request.data_source_id,
         clarifications=request.clarifications,
     )
@@ -55,16 +59,18 @@ async def generate_sql_proposal(
 @router.post("/validate", response_model=SQLValidateResponse)
 async def validate_sql(
     request: SQLValidateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Performs deterministic AST and Policy Engine authorization checks on any SQL statement,
-    including SQL Critic smell analysis.
+    including SQL Critic smell analysis, strictly enforcing server-side role.
     """
+    effective_role_id = get_effective_role_id(current_user, request.role_id)
     analysis = SQLASTParser.analyze_sql(request.sql)
     policy_res = PolicyEngine.validate_sql(
         db=db,
-        role_id=request.role_id,
+        role_id=effective_role_id,
         data_source_id=request.data_source_id,
         sql=request.sql,
     )
@@ -87,6 +93,7 @@ async def validate_sql(
 @router.post("/critic", response_model=SQLCriticResponse)
 async def critique_sql_endpoint(
     request: SQLCriticRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -114,19 +121,21 @@ async def critique_sql_endpoint(
 @router.post("/correct", response_model=SelfCorrectionResult)
 async def self_correct_sql(
     request: SelfCorrectionRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Executes the E1–E7 self-correction retry loop (max 3) against DB execution errors.
     Enforces Rule R4.2: E5 authorization rejections are never retried.
     """
+    effective_role_id = get_effective_role_id(current_user, request.role_id)
     correction_result = SelfCorrectionService.attempt_correction(
         db=db,
         original_question=request.original_question,
         failing_sql=request.failing_sql,
         error_message=request.error_message,
         data_source_id=request.data_source_id,
-        role_id=request.role_id,
+        role_id=effective_role_id,
         max_retries=request.max_retries,
     )
     return correction_result
@@ -135,6 +144,7 @@ async def self_correct_sql(
 @router.post("/validate-results", response_model=ResultValidationReport)
 async def validate_query_results(
     request: ResultValidationRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -162,6 +172,7 @@ def _persist_query_reliability(
     chart_type: Optional[str] = None,
     result_hash: Optional[str] = None,
     data_source_id: int = 1,
+    user_id: Optional[int] = None,
 ):
     if not query_id:
         return
@@ -173,6 +184,8 @@ def _persist_query_reliability(
             q_row.status = status_str
             q_row.row_count = row_count
             q_row.execution_ms = latency_ms
+            if user_id is not None:
+                q_row.user_id = user_id
             if chart_type:
                 q_row.chart_type = chart_type
             if result_hash:
@@ -192,10 +205,10 @@ def _persist_query_reliability(
         db.rollback()
 
 
-
 @router.post("/execute", response_model=SQLExecuteResponse)
 async def execute_sandboxed_sql(
     request: SQLExecuteRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -203,10 +216,13 @@ async def execute_sandboxed_sql(
     ONLY IF it passes all deterministic Policy Engine gates (Rule R1.1-R1.6),
     with post-execution Result Validation (REQ-RESULT-01), optional Self-Correction,
     deterministic Reliability Scoring (REQ-TRUST-01 / Rule R3.3), and Chart Spec generation (REQ-VIS-01).
+    Strictly derives effective role from authenticated session.
     """
+    effective_role_id = get_effective_role_id(current_user, request.role_id)
+
     policy_res = PolicyEngine.validate_sql(
         db=db,
-        role_id=request.role_id,
+        role_id=effective_role_id,
         data_source_id=request.data_source_id,
         sql=request.sql,
     )
@@ -219,7 +235,7 @@ async def execute_sandboxed_sql(
         reliability = ReliabilityScorerService.compute_reliability_score(
             db=db,
             sql=request.sql,
-            role_id=request.role_id,
+            role_id=effective_role_id,
             data_source_id=request.data_source_id,
             policy_validation=policy_res,
             execution_success=False,
@@ -227,7 +243,7 @@ async def execute_sandboxed_sql(
             latency_ms=0,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), request.sql, "rejected_policy", 0, 0
+            db, request.query_id, reliability.model_dump(), request.sql, "rejected_policy", 0, 0, user_id=current_user.user_id
         )
         return SQLExecuteResponse(
             success=False,
@@ -273,7 +289,7 @@ async def execute_sandboxed_sql(
         reliability = ReliabilityScorerService.compute_reliability_score(
             db=db,
             sql=execution_sql,
-            role_id=request.role_id,
+            role_id=effective_role_id,
             data_source_id=request.data_source_id,
             policy_validation=policy_res,
             critic_analysis=critic_res,
@@ -290,7 +306,7 @@ async def execute_sandboxed_sql(
             question=request.question,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value, result_hash=res_hash, data_source_id=request.data_source_id
+            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value, result_hash=res_hash, data_source_id=request.data_source_id, user_id=current_user.user_id
         )
         return SQLExecuteResponse(
             success=True,
@@ -319,7 +335,7 @@ async def execute_sandboxed_sql(
             failing_sql=execution_sql,
             error_message=sandbox_res.error or "Execution error",
             data_source_id=request.data_source_id,
-            role_id=request.role_id,
+            role_id=effective_role_id,
             max_retries=3,
         )
         if correction_res.recovered:
@@ -342,7 +358,7 @@ async def execute_sandboxed_sql(
                 reliability = ReliabilityScorerService.compute_reliability_score(
                     db=db,
                     sql=correction_res.final_sql,
-                    role_id=request.role_id,
+                    role_id=effective_role_id,
                     data_source_id=request.data_source_id,
                     policy_validation=policy_res,
                     critic_analysis=critic_res,
@@ -358,7 +374,7 @@ async def execute_sandboxed_sql(
                     question=request.question,
                 )
                 _persist_query_reliability(
-                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms, repaired_chart_spec.chart_type.value
+                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms, repaired_chart_spec.chart_type.value, user_id=current_user.user_id
                 )
                 return SQLExecuteResponse(
                     success=True,
@@ -380,7 +396,7 @@ async def execute_sandboxed_sql(
     reliability = ReliabilityScorerService.compute_reliability_score(
         db=db,
         sql=execution_sql,
-        role_id=request.role_id,
+        role_id=effective_role_id,
         data_source_id=request.data_source_id,
         policy_validation=policy_res,
         critic_analysis=critic_res,
@@ -390,7 +406,7 @@ async def execute_sandboxed_sql(
         execution_success=False,
     )
     _persist_query_reliability(
-        db, request.query_id, reliability.model_dump(), execution_sql, "failed", 0, sandbox_res.latency_ms
+        db, request.query_id, reliability.model_dump(), execution_sql, "failed", 0, sandbox_res.latency_ms, user_id=current_user.user_id
     )
     return SQLExecuteResponse(
         success=False,
@@ -408,5 +424,6 @@ async def execute_sandboxed_sql(
         correction_result=correction_res,
         reliability_breakdown=reliability,
     )
+
 
 

@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.services.auth_service import AuthService
 from app.models.auth import User, Role
 from app.models.policy import DataPolicy, DataSource, SemanticCatalog
+from tests.conftest import create_test_auth_headers
 
 client = TestClient(app)
 
@@ -37,11 +38,14 @@ def auth_test_context(db_session):
 
     db_session.flush()
 
+    admin_headers = create_test_auth_headers(db_session, role_name="admin", user_id=1, email="admin_primary@trustengine.ai")
+
     yield {
         "db": db_session,
         "admin_role": role_admin,
         "viewer_role": role_viewer,
         "analyst_role": role_analyst,
+        "admin_headers": admin_headers,
         "ds": ds,
     }
 
@@ -118,6 +122,7 @@ def test_auth_login_and_token_lifecycle(auth_test_context):
 def test_policy_admin_matrix_and_fail_closed_visualization(auth_test_context):
     db = auth_test_context["db"]
     viewer_role = auth_test_context["viewer_role"]
+    admin_headers = auth_test_context["admin_headers"]
     ds = auth_test_context["ds"]
 
     # Seed catalog entry for this data source
@@ -132,7 +137,7 @@ def test_policy_admin_matrix_and_fail_closed_visualization(auth_test_context):
     db.flush()
 
     # Fetch policy matrix
-    res = client.get(f"/api/policy/matrix?role_id={viewer_role.role_id}&data_source_id={ds.data_source_id}")
+    res = client.get(f"/api/policy/matrix?role_id={viewer_role.role_id}&data_source_id={ds.data_source_id}", headers=admin_headers)
     assert res.status_code == 200
     matrix = res.json()["data"]
     assert matrix["role_name"] == "viewer"
@@ -148,6 +153,7 @@ def test_policy_admin_matrix_and_fail_closed_visualization(auth_test_context):
 def test_data_policy_crud_operations(auth_test_context):
     db = auth_test_context["db"]
     analyst_role = auth_test_context["analyst_role"]
+    admin_headers = auth_test_context["admin_headers"]
     ds = auth_test_context["ds"]
 
     # 1. Create a policy
@@ -160,12 +166,12 @@ def test_data_policy_crud_operations(auth_test_context):
         "aggregate_allowed": True,
         "row_filter_sql": "total_amount > 50",
     }
-    res_create = client.post("/api/policy", json=create_payload)
+    res_create = client.post("/api/policy", json=create_payload, headers=admin_headers)
     assert res_create.status_code == 200
     pol_id = res_create.json()["data"]["policy_id"]
 
     # 2. List policies
-    res_list = client.get(f"/api/policy?role_id={analyst_role.role_id}&table_name=orders")
+    res_list = client.get(f"/api/policy?role_id={analyst_role.role_id}&table_name=orders", headers=admin_headers)
     assert res_list.status_code == 200
     assert len(res_list.json()["data"]) >= 1
 
@@ -173,15 +179,16 @@ def test_data_policy_crud_operations(auth_test_context):
     res_update = client.put(
         f"/api/policy/{pol_id}",
         json={"row_filter_sql": "total_amount > 100", "aggregate_allowed": False},
+        headers=admin_headers,
     )
     assert res_update.status_code == 200
     assert res_update.json()["data"]["row_filter_sql"] == "total_amount > 100"
     assert res_update.json()["data"]["aggregate_allowed"] is False
 
     # 4. Delete policy
-    res_del = client.delete(f"/api/policy/{pol_id}")
+    res_del = client.delete(f"/api/policy/{pol_id}", headers=admin_headers)
     assert res_del.status_code == 200
 
     # Verify fail-closed reversion
-    res_after = client.get(f"/api/policy?role_id={analyst_role.role_id}&table_name=orders")
+    res_after = client.get(f"/api/policy?role_id={analyst_role.role_id}&table_name=orders", headers=admin_headers)
     assert len(res_after.json()["data"]) == 0

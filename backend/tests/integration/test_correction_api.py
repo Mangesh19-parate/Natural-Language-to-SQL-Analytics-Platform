@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.db.session import get_db
 from app.models.policy import DataSource, DataPolicy, SemanticCatalog
-from app.models.auth import Role
+from app.models.auth import Role, User
 from app.models.session import QueryHistory
 from app.models.trust import ResultValidation
+from tests.conftest import create_test_auth_headers
 
 
 client = TestClient(app)
@@ -23,6 +24,8 @@ def seed_correction_api_data(db_session: Session):
     db_session.add_all([ds, role_admin])
     db_session.flush()
 
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=50, email="admin_corr@test.com")
+
     catalog = [
         SemanticCatalog(data_source_id=ds.data_source_id, table_name="departments", column_name="department_id", semantic_type="identifier", sensitivity="NONE"),
         SemanticCatalog(data_source_id=ds.data_source_id, table_name="departments", column_name="department_name", semantic_type="categorical", sensitivity="NONE"),
@@ -35,7 +38,7 @@ def seed_correction_api_data(db_session: Session):
     q_id = str(uuid.uuid4())
     qh = QueryHistory(
         query_id=q_id,
-        user_id=1,
+        user_id=50,
         nl_question="Show departments",
         initial_sql="SELECT department_name FORM departments;",
         status="success",
@@ -48,6 +51,7 @@ def seed_correction_api_data(db_session: Session):
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
         "query_id": q_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -63,7 +67,7 @@ def test_api_self_correct_endpoint(seed_correction_api_data: dict):
         "role_id": seed_correction_api_data["role_id"],
         "query_id": seed_correction_api_data["query_id"],
     }
-    response = client.post("/api/sql/correct", json=payload)
+    response = client.post("/api/sql/correct", json=payload, headers=seed_correction_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -87,7 +91,7 @@ def test_api_validate_results_endpoint(seed_correction_api_data: dict):
         "data_source_id": seed_correction_api_data["ds_id"],
         "query_id": q_id,
     }
-    response = client.post("/api/sql/validate-results", json=payload)
+    response = client.post("/api/sql/validate-results", json=payload, headers=seed_correction_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -111,8 +115,7 @@ def test_api_execute_endpoint_with_auto_correction_and_result_validation(seed_co
         "question": "Show all department names",
         "query_id": seed_correction_api_data["query_id"],
     }
-    # Note: policy validator may fail on initial AST syntax check or sandbox execution
-    response = client.post("/api/sql/execute", json=payload)
+    response = client.post("/api/sql/execute", json=payload, headers=seed_correction_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
     assert "policy_validation" in data
@@ -127,10 +130,11 @@ def test_api_execute_endpoint_e5_policy_rejection_no_retry(seed_correction_api_d
         "auto_correct": True,
         "question": "What is the employee salary?",
     }
-    response = client.post("/api/sql/execute", json=payload)
+    response = client.post("/api/sql/execute", json=payload, headers=seed_correction_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is False
     assert data["error_type"] == "E5"
     assert data["correction_result"] is None or data["correction_result"]["routed_as_policy_rejection"] is True
+
 

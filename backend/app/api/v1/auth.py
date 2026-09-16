@@ -221,6 +221,7 @@ def register_user(
 ):
     """
     Creates a new user with hashed password.
+    Always assigns the lowest-privilege 'viewer' role to public registrations (REQ-AUTH-01 / Rule R0).
     """
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
@@ -229,19 +230,16 @@ def register_user(
             detail="User with this email already exists",
         )
 
-    # If role_id is not specified, assign 'viewer' role by default
-    assigned_role_id = user_data.role_id
-    if not assigned_role_id:
-        viewer_role = db.query(Role).filter(Role.role_name == "viewer").first()
-        if viewer_role:
-            assigned_role_id = viewer_role.role_id
+    # Strictly assign 'viewer' role for all public self-registrations (never allow self-escalation)
+    viewer_role = db.query(Role).filter(Role.role_name == "viewer").first()
+    assigned_role_id = viewer_role.role_id if viewer_role else 3
 
     new_user = User(
         full_name=user_data.full_name,
         email=user_data.email,
         password_hash=AuthService.get_password_hash(user_data.password),
         role_id=assigned_role_id,
-        is_active=user_data.is_active,
+        is_active=True,
     )
     db.add(new_user)
     db.commit()
@@ -260,3 +258,47 @@ def register_user(
             is_active=new_user.is_active,
         ),
     )
+
+
+@router.put("/users/{user_id}/role", response_model=StandardResponse[UserOut])
+def update_user_role(
+    user_id: int,
+    role_id: int,
+    current_user: User = Depends(require_roles(["admin"])),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin-only endpoint to assign or change a user's role (REQ-AUTH-01).
+    """
+    target_user = db.query(User).filter(User.user_id == user_id).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found",
+        )
+
+    target_role = db.query(Role).filter(Role.role_id == role_id).first()
+    if not target_role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Role with ID {role_id} not found",
+        )
+
+    target_user.role_id = role_id
+    db.commit()
+    db.refresh(target_user)
+
+    role_name = target_user.role.role_name if target_user.role else "viewer"
+    return StandardResponse(
+        success=True,
+        message=f"User role updated to '{role_name}' successfully",
+        data=UserOut(
+            user_id=target_user.user_id,
+            full_name=target_user.full_name,
+            email=target_user.email,
+            role_id=target_user.role_id,
+            role_name=role_name,
+            is_active=target_user.is_active,
+        ),
+    )
+

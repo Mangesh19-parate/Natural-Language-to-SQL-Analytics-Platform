@@ -49,6 +49,9 @@ def seed_planner_agent_data(db_session: Session):
     app.dependency_overrides.clear()
 
 
+from tests.conftest import create_test_auth_headers
+
+
 def test_compound_query_detection():
     """Verify PlannerAgentService identifies compound and multi-step analytical intents."""
     assert PlannerAgentService.is_compound_query("Compare revenue from 2023 vs 2024 and calculate growth") is True
@@ -68,12 +71,13 @@ def test_compound_query_decomposition():
 
 def test_planner_agent_execution_authorized(seed_planner_agent_data: dict):
     """Test POST /api/agent/execute with authorized admin role executes DAG and returns synthesized answer."""
+    headers = create_test_auth_headers(seed_planner_agent_data["db"], role_name="admin", user_id=1)
     payload = {
         "question": "Compare revenue from 2023 vs 2024 and calculate growth",
         "role_id": seed_planner_agent_data["admin_role_id"],
         "data_source_id": seed_planner_agent_data["ds_id"],
     }
-    response = client.post("/api/agent/execute", json=payload)
+    response = client.post("/api/agent/execute", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -91,12 +95,13 @@ def test_planner_agent_execution_policy_blocked(seed_planner_agent_data: dict):
     Test POST /api/agent/execute with viewer role attempting to access unauthorized sales table
     is strictly blocked by the Policy Engine (Rule R6.1).
     """
+    headers = create_test_auth_headers(seed_planner_agent_data["db"], role_name="viewer", user_id=2)
     payload = {
         "question": "Compare revenue from 2023 vs 2024 and calculate growth",
         "role_id": seed_planner_agent_data["viewer_role_id"],
         "data_source_id": seed_planner_agent_data["ds_id"],
     }
-    response = client.post("/api/agent/execute", json=payload)
+    response = client.post("/api/agent/execute", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True

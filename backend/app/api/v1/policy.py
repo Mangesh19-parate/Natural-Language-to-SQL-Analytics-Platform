@@ -24,6 +24,7 @@ def list_policies(
     role_id: Optional[int] = Query(None, description="Filter by role ID"),
     data_source_id: Optional[int] = Query(None, description="Filter by data source ID"),
     table_name: Optional[str] = Query(None, description="Filter by table name"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -64,6 +65,7 @@ def list_policies(
 def get_policy_matrix(
     role_id: int = Query(..., description="Role ID to inspect permissions for"),
     data_source_id: int = Query(1, description="Data source ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -98,51 +100,40 @@ def get_policy_matrix(
     table_policies = {p.table_name: p for p in policies if p.column_name is None}
     col_policies = {(p.table_name, p.column_name): p for p in policies if p.column_name is not None}
 
-    # Group catalog by table
-    tables_dict = {}
+    # Group catalog entries by table
+    tables_map = {}
     for entry in catalog_entries:
-        if entry.table_name not in tables_dict:
-            tables_dict[entry.table_name] = []
-        tables_dict[entry.table_name].append(entry)
+        if entry.table_name not in tables_map:
+            tables_map[entry.table_name] = []
+        if entry.column_name:
+            tables_map[entry.table_name].append(entry)
 
-    matrix_tables: List[PolicyMatrixTableItem] = []
-
-    for tbl_name, cols in sorted(tables_dict.items()):
+    matrix_tables = []
+    for tbl_name, col_entries in tables_map.items():
         tbl_pol = table_policies.get(tbl_name)
         has_table_policy = tbl_pol is not None
-
         tbl_access = tbl_pol.access_level if tbl_pol else "denied"
         tbl_agg = tbl_pol.aggregate_allowed if tbl_pol else False
         tbl_rf = tbl_pol.row_filter_sql if tbl_pol else None
-        tbl_fail_closed = not has_table_policy or tbl_access == "denied"
+        tbl_fail_closed = not has_table_policy
 
-        matrix_cols: List[PolicyMatrixColumnItem] = []
-        for col in sorted(cols, key=lambda c: c.column_name):
-            c_pol = col_policies.get((tbl_name, col.column_name))
-            has_col_policy = c_pol is not None
-
-            if has_col_policy:
-                c_access = c_pol.access_level
-                c_agg = c_pol.aggregate_allowed
-                c_fail_closed = c_access == "denied"
-                c_pid = c_pol.policy_id
-            else:
-                # Inherit table-level access unless no table policy exists
-                c_access = tbl_access
-                c_agg = tbl_agg
-                c_fail_closed = tbl_fail_closed
-                c_pid = None
+        matrix_cols = []
+        for col in col_entries:
+            col_pol = col_policies.get((tbl_name, col.column_name))
+            has_col_policy = col_pol is not None
+            col_access = col_pol.access_level if col_pol else tbl_access
+            col_fail_closed = not has_col_policy and tbl_fail_closed
 
             matrix_cols.append(
                 PolicyMatrixColumnItem(
                     column_name=col.column_name,
-                    access_level=c_access,
-                    aggregate_allowed=c_agg,
+                    access_level=col_access,
+                    aggregate_allowed=col_pol.aggregate_allowed if col_pol else tbl_agg,
                     is_explicit=has_col_policy,
-                    is_fail_closed_denied=c_fail_closed,
-                    sensitivity=col.sensitivity,
+                    is_fail_closed_denied=col_fail_closed,
+                    sensitivity=col.sensitivity or "NONE",
                     semantic_type=col.semantic_type,
-                    policy_id=c_pid,
+                    policy_id=col_pol.policy_id if col_pol else None,
                 )
             )
 
@@ -174,10 +165,11 @@ def get_policy_matrix(
 @router.post("", response_model=StandardResponse[DataPolicyOut])
 def create_or_upsert_policy(
     policy_data: DataPolicyCreate,
+    current_user: User = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
 ):
     """
-    Creates or updates a data policy rule. Enforces fail-closed semantics (REQ-AUTH-02).
+    Creates or updates a data policy rule. Strictly restricted to admin role (REQ-AUTH-02).
     """
     # Check if a policy already exists for this role + table + column
     existing = (
@@ -233,10 +225,11 @@ def create_or_upsert_policy(
 def update_policy(
     policy_id: int,
     policy_data: DataPolicyUpdate,
+    current_user: User = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
 ):
     """
-    Updates an existing data policy row.
+    Updates an existing data policy row. Strictly restricted to admin role.
     """
     policy = db.query(DataPolicy).filter(DataPolicy.policy_id == policy_id).first()
     if not policy:
@@ -275,10 +268,11 @@ def update_policy(
 @router.delete("/{policy_id}", response_model=StandardResponse[dict])
 def delete_policy(
     policy_id: int,
+    current_user: User = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
 ):
     """
-    Deletes a policy row, reverting access to fail-closed default (zero access).
+    Deletes a policy row, reverting access to fail-closed default (zero access). Strictly admin.
     """
     policy = db.query(DataPolicy).filter(DataPolicy.policy_id == policy_id).first()
     if not policy:

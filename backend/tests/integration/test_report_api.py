@@ -2,24 +2,15 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
-from app.models.auth import Role, User
+from tests.conftest import create_test_auth_headers
 
 
-@pytest.fixture
-def seed_report_db(db_session: Session):
-    role_admin = Role(role_id=1, role_name="admin")
-    user_test = User(user_id=1, full_name="Test Analyst", email="analyst@corp.com", password_hash="dummy", role_id=1)
-    db_session.add_all([role_admin, user_test])
-    db_session.commit()
-    return db_session
-
-
-
-def test_pdf_report_export_and_download_api(seed_report_db):
+def test_pdf_report_export_and_download_api(db_session: Session):
     """
     Test POST /api/report/pdf generates report and GET /api/report/{id}/download streams the file.
     """
     client = TestClient(app)
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     payload = {
         "title": "Quarterly Revenue Summary",
         "scope": "single_query",
@@ -50,7 +41,7 @@ def test_pdf_report_export_and_download_api(seed_report_db):
     }
 
     # Generate PDF
-    res = client.post("/api/report/pdf", json=payload)
+    res = client.post("/api/report/pdf", json=payload, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["format"] == "pdf"
@@ -60,17 +51,18 @@ def test_pdf_report_export_and_download_api(seed_report_db):
 
     # Download PDF
     report_id = data["report_id"]
-    dl_res = client.get(f"/api/report/{report_id}/download")
+    dl_res = client.get(f"/api/report/{report_id}/download", headers=headers)
     assert dl_res.status_code == 200
     assert dl_res.headers["content-type"] == "application/pdf"
     assert len(dl_res.content) > 1000
 
 
-def test_excel_report_export_api(seed_report_db):
+def test_excel_report_export_api(db_session: Session):
     """
     Test POST /api/report/excel generates xlsx and GET /api/report/{id}/download downloads it.
     """
     client = TestClient(app)
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     payload = {
         "title": "Employee Directory Export",
         "scope": "single_query",
@@ -86,24 +78,25 @@ def test_excel_report_export_api(seed_report_db):
         ],
     }
 
-    res = client.post("/api/report/excel", json=payload)
+    res = client.post("/api/report/excel", json=payload, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["format"] == "xlsx"
 
     report_id = data["report_id"]
-    dl_res = client.get(f"/api/report/{report_id}/download")
+    dl_res = client.get(f"/api/report/{report_id}/download", headers=headers)
     assert dl_res.status_code == 200
     assert "spreadsheetml" in dl_res.headers["content-type"]
     assert len(dl_res.content) > 500
 
 
-def test_list_reports_api(seed_report_db):
+def test_list_reports_api(db_session: Session):
     """
     Test GET /api/report/list returns user's reports.
     """
     client = TestClient(app)
-    res = client.get("/api/report/list?user_id=1")
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
+    res = client.get("/api/report/list?user_id=1", headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["success"] is True

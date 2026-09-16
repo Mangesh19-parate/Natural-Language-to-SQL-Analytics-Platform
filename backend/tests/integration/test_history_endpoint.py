@@ -6,7 +6,8 @@ from app.db.session import get_db
 from app.models.session import QueryHistory, SessionModel
 from app.models.trust import SqlCriticFinding, ResultValidation
 from app.models.policy import DataSource, DataPolicy, SemanticCatalog
-from app.models.auth import Role
+from app.models.auth import Role, User
+from tests.conftest import create_test_auth_headers
 
 client = TestClient(app)
 
@@ -28,6 +29,8 @@ def seed_history_data(db_session):
 
     db_session.flush()
 
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=40, email="admin_history@test.com")
+
     # Ensure admin has access to products and orders
     db_session.add_all([
         DataPolicy(role_id=role_admin.role_id, data_source_id=ds.data_source_id, table_name="products", access_level="read", aggregate_allowed=True),
@@ -38,6 +41,7 @@ def seed_history_data(db_session):
     q_id = str(uuid.uuid4())
     q_item = QueryHistory(
         query_id=q_id,
+        user_id=40,
         nl_question="Show total revenue by department",
         final_sql="SELECT d.department_name, SUM(e.salary) FROM departments d JOIN employees e ON d.department_id = e.department_id GROUP BY d.department_name",
         status="success",
@@ -54,6 +58,7 @@ def seed_history_data(db_session):
         "query_id": q_id,
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -61,9 +66,10 @@ def seed_history_data(db_session):
 
 def test_query_history_list_and_detail(seed_history_data):
     q_id = seed_history_data["query_id"]
+    headers = seed_history_data["headers"]
 
     # 1. Test List
-    res_list = client.get("/api/history?page=1&page_size=10")
+    res_list = client.get("/api/history?page=1&page_size=10", headers=headers)
     assert res_list.status_code == 200
     data = res_list.json()["data"]
     assert data["total"] >= 1
@@ -71,12 +77,12 @@ def test_query_history_list_and_detail(seed_history_data):
     assert found is True
 
     # 2. Test Search
-    res_search = client.get("/api/history?search=department")
+    res_search = client.get("/api/history?search=department", headers=headers)
     assert res_search.status_code == 200
     assert len(res_search.json()["data"]["items"]) >= 1
 
     # 3. Test Detail
-    res_detail = client.get(f"/api/history/{q_id}")
+    res_detail = client.get(f"/api/history/{q_id}", headers=headers)
     assert res_detail.status_code == 200
     detail = res_detail.json()["data"]
     assert detail["query_id"] == q_id
@@ -88,10 +94,12 @@ def test_query_history_live_rerun(seed_history_data):
     db = seed_history_data["db"]
     ds_id = seed_history_data["ds_id"]
     role_id = seed_history_data["role_id"]
+    headers = seed_history_data["headers"]
 
     q_id = str(uuid.uuid4())
     q_item = QueryHistory(
         query_id=q_id,
+        user_id=40,
         nl_question="Show products with price above 100",
         final_sql="SELECT product_id, product_name, price FROM products WHERE price > 100 LIMIT 10",
         status="success",
@@ -103,6 +111,7 @@ def test_query_history_live_rerun(seed_history_data):
     # Test live rerun (rerun-by-default principle: fresh execution without cached data)
     res_rerun = client.post(
         f"/api/history/{q_id}/rerun",
+        headers=headers,
         json={"data_source_id": ds_id, "role_id": role_id},
     )
     assert res_rerun.status_code == 200
@@ -116,9 +125,11 @@ def test_query_history_live_rerun(seed_history_data):
 
 def test_delete_query_history(seed_history_data):
     db = seed_history_data["db"]
+    headers = seed_history_data["headers"]
     q_id = str(uuid.uuid4())
     q_item = QueryHistory(
         query_id=q_id,
+        user_id=40,
         nl_question="Temporary query for deletion",
         final_sql="SELECT 1",
         status="failed",
@@ -126,8 +137,9 @@ def test_delete_query_history(seed_history_data):
     db.add(q_item)
     db.commit()
 
-    res_del = client.delete(f"/api/history/{q_id}")
+    res_del = client.delete(f"/api/history/{q_id}", headers=headers)
     assert res_del.status_code == 200
 
-    res_get = client.get(f"/api/history/{q_id}")
+    res_get = client.get(f"/api/history/{q_id}", headers=headers)
     assert res_get.status_code == 404
+

@@ -8,6 +8,7 @@ from app.models.session import QueryHistory
 from app.models.policy import SchemaSnapshot, SemanticCatalog, DataSource, DataPolicy
 from app.models.auth import Role
 from app.services.query_replay import QueryReplayService
+from tests.conftest import create_test_auth_headers
 
 client = TestClient(app)
 
@@ -126,8 +127,10 @@ def test_query_replay_api_and_provenance(seed_replay_data):
     db.add(q_item)
     db.commit()
 
+    headers = create_test_auth_headers(db, role_name="admin", user_id=1)
+
     # 3. Test GET /api/replay/{query_id} (Provenance Package)
-    res_prov = client.get(f"/api/replay/{q_id}?data_source_id={ds_id}")
+    res_prov = client.get(f"/api/replay/{q_id}?data_source_id={ds_id}", headers=headers)
     assert res_prov.status_code == 200
     prov_data = res_prov.json()["data"]
     assert prov_data["query_id"] == q_id
@@ -138,7 +141,7 @@ def test_query_replay_api_and_provenance(seed_replay_data):
     assert "drift_report" in prov_data
 
     # 4. Test POST /api/replay/{query_id} (Reproducible Replay Execution)
-    res_replay = client.post(f"/api/replay/{q_id}?role_id={role_id}&data_source_id={ds_id}")
+    res_replay = client.post(f"/api/replay/{q_id}?role_id={role_id}&data_source_id={ds_id}", headers=headers)
     assert res_replay.status_code == 200
     replay_data = res_replay.json()["data"]
     assert replay_data["is_reproducible"] is True

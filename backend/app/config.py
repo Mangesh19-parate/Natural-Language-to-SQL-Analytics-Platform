@@ -22,10 +22,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # LLM Settings
-    LLM_PROVIDER: str = "mock"  # 'openai' | 'groq' | 'gemini' | 'mock'
+    LLM_PROVIDER: str = "mock"  # 'openai' | 'groq' | 'gemini' | 'openrouter' | 'mock'
     OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
     DEFAULT_MODEL_NAME: str = "gpt-4o-mini"
     DEFAULT_TEMPERATURE: float = 0.0
 

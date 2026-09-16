@@ -2,31 +2,21 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
-from app.models.auth import Role, User
+from tests.conftest import create_test_auth_headers
 
 
-@pytest.fixture
-def seed_optimize_db(db_session: Session):
-    role_admin = Role(role_id=1, role_name="admin")
-    role_analyst = Role(role_id=2, role_name="analyst")
-    user_test = User(user_id=1, full_name="Test Analyst", email="analyst@corp.com", password_hash="dummy", role_id=2)
-    db_session.add_all([role_admin, role_analyst, user_test])
-    db_session.commit()
-    return db_session
-
-
-
-def test_optimize_explain_endpoint(seed_optimize_db):
+def test_optimize_explain_endpoint(db_session: Session):
     """
     Test POST /api/optimize/explain returns plan summary, structured suggestions with confidence and copyable DDL.
     """
     client = TestClient(app)
+    headers = create_test_auth_headers(db_session, role_name="analyst", user_id=1)
     payload = {
         "sql": "SELECT first_name, last_name, salary FROM employees WHERE salary > 75000;",
         "role_name": "analyst",
     }
 
-    res = client.post("/api/optimize/explain", json=payload)
+    res = client.post("/api/optimize/explain", json=payload, headers=headers)
     assert res.status_code == 200
     data = res.json()
     assert data["mode"] == "explain"
@@ -40,7 +30,7 @@ def test_optimize_explain_endpoint(seed_optimize_db):
         assert "observed" in s["evidence_json"]
 
 
-def test_optimize_analyze_endpoint_role_gating(seed_optimize_db):
+def test_optimize_analyze_endpoint_role_gating(db_session: Session):
     """
     Test POST /api/optimize/analyze:
     - 403 Forbidden for role != 'admin'
@@ -48,23 +38,25 @@ def test_optimize_analyze_endpoint_role_gating(seed_optimize_db):
     """
     client = TestClient(app)
 
+    analyst_headers = create_test_auth_headers(db_session, role_name="analyst", user_id=11, email="analyst11@corp.com")
+    admin_headers = create_test_auth_headers(db_session, role_name="admin", user_id=10, email="admin10@corp.com")
+
     # 1. Non-admin request -> 403 Forbidden
     non_admin_payload = {
         "sql": "SELECT * FROM products WHERE unit_price > 50;",
-        "role_name": "analyst",
     }
-    res_forbidden = client.post("/api/optimize/analyze", json=non_admin_payload)
+    res_forbidden = client.post("/api/optimize/analyze", json=non_admin_payload, headers=analyst_headers)
     assert res_forbidden.status_code == 403
-    assert "restricted to administrators" in res_forbidden.json()["detail"]
+    assert "Access denied" in res_forbidden.json()["detail"]
 
     # 2. Admin request -> 200 OK
     admin_payload = {
         "sql": "SELECT * FROM products WHERE unit_price > 50;",
-        "role_name": "admin",
     }
-    res_ok = client.post("/api/optimize/analyze", json=admin_payload)
+    res_ok = client.post("/api/optimize/analyze", json=admin_payload, headers=admin_headers)
     assert res_ok.status_code == 200
     data = res_ok.json()
     assert data["mode"] == "explain_analyze"
     assert "execution_stats" in data
     assert len(data["suggestions"]) > 0
+

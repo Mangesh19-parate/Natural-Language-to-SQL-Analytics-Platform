@@ -9,7 +9,7 @@ from app.db.session import SessionLocal, metadata_engine
 from app.db.base import Base
 from app.models.auth import Role, User
 from app.models.policy import DataSource
-from app.services.llm_provider import LLMProviderService
+from app.services.auth_service import AuthService
 
 
 def init_metadata_database():
@@ -35,20 +35,33 @@ def init_metadata_database():
                 role_map[r_name] = existing
         print("[OK] Verified default roles (admin, analyst, viewer).")
 
-        # 2. Seed Default Admin User
-        admin_email = "admin@example.com"
-        admin_user = db.query(User).filter(User.email == admin_email).first()
-        if not admin_user:
-            admin_user = User(
-                full_name="System Administrator",
-                email=admin_email,
-                password_hash=LLMProviderService.hash_text("AdminSecurePassword123!"),
-                role_id=role_map["admin"].role_id,
-                is_active=True
-            )
-            db.add(admin_user)
-            db.flush()
-            print(f"[OK] Created initial admin user: {admin_email}")
+        # 2. Seed Default Standard Users
+        seed_users = [
+            ("System Administrator", "admin@trustengine.ai", "AdminSecurePassword123!", "admin"),
+            ("System Administrator Legacy", "admin@example.com", "AdminSecurePassword123!", "admin"),
+            ("Senior Data Analyst", "analyst@trustengine.ai", "AnalystSecurePassword123!", "analyst"),
+            ("Business Viewer", "viewer@trustengine.ai", "ViewerSecurePassword123!", "viewer"),
+        ]
+
+        for full_name, email, raw_pw, r_name in seed_users:
+            u = db.query(User).filter(User.email == email).first()
+            pw_hash = AuthService.get_password_hash(raw_pw)
+            if not u:
+                u = User(
+                    full_name=full_name,
+                    email=email,
+                    password_hash=pw_hash,
+                    role_id=role_map[r_name].role_id,
+                    is_active=True
+                )
+                db.add(u)
+                db.flush()
+                print(f"[OK] Created initial user: {email} (role: {r_name})")
+            else:
+                u.password_hash = pw_hash
+                u.role_id = role_map[r_name].role_id
+                u.is_active = True
+                db.flush()
 
         # 3. Seed Default Business Data Source
         default_ds = db.query(DataSource).filter(DataSource.name == "Primary Enterprise DB").first()

@@ -7,6 +7,9 @@ from app.models.policy import DataPolicy, SemanticCatalog, DataSource
 from app.models.auth import Role
 
 
+from tests.conftest import create_test_auth_headers
+
+
 client = TestClient(app)
 
 
@@ -19,6 +22,8 @@ def seed_sql_api_data(db_session: Session):
     role_analyst = Role(role_name="analyst")
     db_session.add_all([ds, role_analyst])
     db_session.flush()
+
+    headers = create_test_auth_headers(db_session, role_name="analyst", user_id=20, email="analyst_sql@test.com")
 
     # Seed catalog
     catalog = [
@@ -42,6 +47,7 @@ def seed_sql_api_data(db_session: Session):
         "db": db_session,
         "ds_id": ds.data_source_id,
         "role_id": role_analyst.role_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -54,7 +60,7 @@ def test_api_generate_sql_success(seed_sql_api_data: dict):
         "role_id": seed_sql_api_data["role_id"],
         "data_source_id": seed_sql_api_data["ds_id"]
     }
-    response = client.post("/api/sql/generate", json=payload)
+    response = client.post("/api/sql/generate", json=payload, headers=seed_sql_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -72,7 +78,7 @@ def test_api_validate_sql_select_only(seed_sql_api_data: dict):
         "role_id": seed_sql_api_data["role_id"],
         "data_source_id": seed_sql_api_data["ds_id"]
     }
-    response = client.post("/api/sql/validate", json=payload)
+    response = client.post("/api/sql/validate", json=payload, headers=seed_sql_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -88,7 +94,7 @@ def test_api_validate_sql_unauthorized_column(seed_sql_api_data: dict):
         "role_id": seed_sql_api_data["role_id"],
         "data_source_id": seed_sql_api_data["ds_id"]
     }
-    response = client.post("/api/sql/validate", json=payload)
+    response = client.post("/api/sql/validate", json=payload, headers=seed_sql_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -98,3 +104,4 @@ def test_api_validate_sql_unauthorized_column(seed_sql_api_data: dict):
         v["violation_type"] == "UNAUTHORIZED_COLUMN" and v["column_name"] == "ssn"
         for v in data["policy_validation"]["violations"]
     )
+

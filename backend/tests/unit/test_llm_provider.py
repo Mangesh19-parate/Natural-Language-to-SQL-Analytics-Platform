@@ -25,3 +25,21 @@ async def test_llm_provider_hashed_auditing():
     # 2. Re-computing hash on identical input must yield exact match
     expected_prompt_hash = LLMProviderService.hash_text(f"{system_prompt}\n---\n{user_prompt}")
     assert response.prompt_hash == expected_prompt_hash
+
+
+@pytest.mark.asyncio
+async def test_llm_provider_multi_provider_fallbacks():
+    """Verifies that live providers with invalid or missing keys fall back to mock safely."""
+    for prov in ["openai", "groq", "gemini", "openrouter"]:
+        service = LLMProviderService(provider=prov, api_key="invalid_test_key", timeout_seconds=1.0)
+        assert service.provider == prov
+        resp = await service.generate(system_prompt="system", user_prompt="How many employees?")
+        assert resp.content is not None
+        assert len(resp.prompt_hash) == 64
+        assert len(resp.response_hash) == 64
+
+
+def test_llm_provider_sync_completion():
+    """Verifies synchronous completion generation helper."""
+    res = LLMProviderService.generate_completion("How many employees?")
+    assert "total_employees" in res or "employees" in res

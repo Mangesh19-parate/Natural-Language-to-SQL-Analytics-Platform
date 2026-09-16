@@ -9,7 +9,7 @@ from app.schemas.replay import (
     QueryReplayResponse,
 )
 from app.schemas.common import StandardResponse
-from app.services.auth_service import get_current_user_optional
+from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.query_replay import QueryReplayService
 
 router = APIRouter(prefix="/replay", tags=["Query Replay & Provenance"])
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/replay", tags=["Query Replay & Provenance"])
 def get_provenance_record(
     query_id: str,
     data_source_id: int = Query(1, description="Data source ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -46,19 +47,16 @@ def get_provenance_record(
 @router.post("/{query_id}", response_model=StandardResponse[QueryReplayResponse])
 def replay_query_endpoint(
     query_id: str,
-    role_id: Optional[int] = Query(None, description="Role ID to replay under"),
+    role_id: Optional[int] = Query(None, description="Role ID to replay under (Admin only)"),
     data_source_id: int = Query(1, description="Data source ID"),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Executes a reproducible rerun of a past query run and computes result hash comparison (REQ-REPLAY-01).
+    Strictly derives effective role from authenticated session.
     """
-    effective_role_id = role_id
-    if effective_role_id is None and current_user:
-        effective_role_id = current_user.role_id
-    if effective_role_id is None:
-        effective_role_id = 1  # Default admin/analyst role
+    effective_role_id = get_effective_role_id(current_user, role_id)
 
     try:
         replay_res = QueryReplayService.replay_and_verify(
@@ -77,3 +75,4 @@ def replay_query_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+

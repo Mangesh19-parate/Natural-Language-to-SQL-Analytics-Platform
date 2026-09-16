@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.db.session import get_db
 from app.models.policy import DataSource, DataPolicy, SemanticCatalog
-from app.models.auth import Role
+from app.models.auth import Role, User
 from app.models.session import QueryHistory
 from app.models.trust import SqlCriticFinding
 from app.services.sql_critic import SQLCriticService
+from tests.conftest import create_test_auth_headers
 
 
 client = TestClient(app)
@@ -24,6 +25,8 @@ def seed_critic_api_data(db_session: Session):
     db_session.add_all([ds, role_admin])
     db_session.flush()
 
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=60, email="admin_critic@test.com")
+
     catalog = [
         SemanticCatalog(data_source_id=ds.data_source_id, table_name="orders", column_name="order_id", semantic_type="identifier", sensitivity="NONE"),
         SemanticCatalog(data_source_id=ds.data_source_id, table_name="orders", column_name="total_amount", semantic_type="monetary", sensitivity="NONE"),
@@ -37,7 +40,7 @@ def seed_critic_api_data(db_session: Session):
     q_id = str(uuid.uuid4())
     qh = QueryHistory(
         query_id=q_id,
-        user_id=1,
+        user_id=60,
         nl_question="What is the sum of order ids?",
         initial_sql="SELECT SUM(order_id) FROM orders;",
         status="success",
@@ -50,6 +53,7 @@ def seed_critic_api_data(db_session: Session):
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
         "query_id": q_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -63,7 +67,7 @@ def test_api_critic_endpoint(seed_critic_api_data: dict):
         "role_id": seed_critic_api_data["role_id"],
         "query_id": seed_critic_api_data["query_id"],
     }
-    response = client.post("/api/sql/critic", json=payload)
+    response = client.post("/api/sql/critic", json=payload, headers=seed_critic_api_data["headers"])
     assert response.status_code == 200
     data = response.json()
 
@@ -89,10 +93,11 @@ def test_sql_critic_findings_persistence(seed_critic_api_data: dict):
         "role_id": seed_critic_api_data["role_id"],
         "query_id": q_id,
     }
-    client.post("/api/sql/critic", json=payload)
+    client.post("/api/sql/critic", json=payload, headers=seed_critic_api_data["headers"])
 
     # Query DB table
     db_findings = db.query(SqlCriticFinding).filter(SqlCriticFinding.query_id == q_id).all()
     assert len(db_findings) >= 1
     assert db_findings[0].finding_type == "aggregate_on_identifier"
     assert db_findings[0].suggested_fix is not None
+

@@ -15,7 +15,7 @@ from app.schemas.history import (
 )
 from app.schemas.query import SQLExecuteResponse
 from app.schemas.common import StandardResponse
-from app.services.auth_service import get_current_user_optional
+from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
 from app.services.sql_critic import SQLCriticService
@@ -34,17 +34,23 @@ def list_query_history(
     search: Optional[str] = Query(None, description="Search in question or SQL"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Retrieves a paginated list of past queries with execution status and reliability scores (REQ-HIST-01).
+    Scoped to current_user unless requester is Admin.
     """
     query = db.query(QueryHistory)
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+
+    if user_role_name == "admin" and user_id is not None:
+        query = query.filter(QueryHistory.user_id == user_id)
+    elif user_role_name != "admin":
+        query = query.filter(QueryHistory.user_id == current_user.user_id)
 
     if session_id:
         query = query.filter(QueryHistory.session_id == session_id)
-    if user_id is not None:
-        query = query.filter(QueryHistory.user_id == user_id)
     if status_filter:
         query = query.filter(QueryHistory.status == status_filter)
     if search:
@@ -95,16 +101,24 @@ def list_query_history(
 @router.get("/{query_id}", response_model=StandardResponse[QueryHistoryDetail])
 def get_query_history_detail(
     query_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Retrieves full details, provenance metadata, critic findings, and result validations for a specific query run.
+    Retrieves full execution audit details for a specific query run.
     """
     item = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Query history record {query_id} not found",
+        )
+
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if item.user_id and item.user_id != current_user.user_id and user_role_name != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. You are not authorized to view this query history detail.",
         )
 
     critic_findings = (
@@ -120,21 +134,14 @@ def get_query_history_detail(
         user_id=item.user_id,
         nl_question=item.nl_question,
         classification=item.classification,
-        ambiguity_flag=item.ambiguity_flag,
-        clarification_asked=item.clarification_asked,
         initial_sql=item.initial_sql,
         final_sql=item.final_sql,
-        dialect=item.dialect or "postgresql",
-        correction_count=item.correction_count,
-        error_type=item.error_type,
         status=item.status,
-        error_message=item.error_message,
         execution_ms=item.execution_ms,
         row_count=item.row_count,
         chart_type=item.chart_type,
-        explanation=item.explanation,
-        result_hash=item.result_hash,
         schema_snapshot_id=item.schema_snapshot_id,
+        result_hash=item.result_hash,
         prompt_version=item.prompt_version,
         model_name=item.model_name,
         model_params=item.model_params,
@@ -142,10 +149,10 @@ def get_query_history_detail(
         critic_findings=[
             {
                 "finding_id": f.finding_id,
-                "finding_type": f.finding_type,
-                "detail": f.detail,
-                "suggested_fix": f.suggested_fix,
-                "user_action": f.user_action,
+                "smell_type": f.smell_type,
+                "severity": f.severity,
+                "description": f.description,
+                "suggestion": f.suggestion,
             }
             for f in critic_findings
         ],
@@ -173,12 +180,13 @@ def get_query_history_detail(
 def rerun_historical_query(
     query_id: str,
     rerun_req: QueryRerunRequest = QueryRerunRequest(),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Reruns a historical query LIVE against current database and policies (REQ-HIST-01).
     Enforces 'Rerun-by-Default' principle: never returns stale cached results.
+    Strictly derives authorization role from current_user.
     """
     item = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
     if not item:
@@ -194,12 +202,8 @@ def rerun_historical_query(
             detail="Historical record does not contain executable SQL",
         )
 
-    # Determine effective role_id
-    effective_role_id = rerun_req.role_id
-    if effective_role_id is None and current_user:
-        effective_role_id = current_user.role_id
-    if effective_role_id is None:
-        effective_role_id = 1  # default to admin/analyst role if unauthenticated
+    # Determine effective role_id strictly on server side
+    effective_role_id = get_effective_role_id(current_user, rerun_req.role_id)
 
     # Validate against Policy Engine
     policy_res = PolicyEngine.validate_sql(

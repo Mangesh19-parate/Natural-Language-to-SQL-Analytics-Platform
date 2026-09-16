@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
 from app.db.session import get_db
-from app.models.auth import Role
 from app.models.policy import DataSource, DataPolicy, SemanticCatalog
+from tests.conftest import create_test_auth_headers
 
 client = TestClient(app)
 
@@ -12,11 +12,13 @@ client = TestClient(app)
 def test_intent_api_classify_and_resolve(db_session: Session):
     app.dependency_overrides[get_db] = lambda: db_session
     try:
-        # 1. Setup Data Source and Role
-        admin_role = Role(role_name="intent_admin")
+        headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
         ds = DataSource(name="Intent DB", db_type="postgresql", secret_ref="env:TEST", is_active=True)
-        db_session.add_all([admin_role, ds])
+        db_session.add(ds)
         db_session.flush()
+
+        from app.models.auth import Role
+        admin_role = db_session.query(Role).filter(Role.role_name == "admin").first()
 
         # Add catalog & policies
         db_session.add_all([
@@ -33,7 +35,7 @@ def test_intent_api_classify_and_resolve(db_session: Session):
             "data_source_id": ds.data_source_id,
             "role_id": admin_role.role_id
         }
-        resp = client.post("/api/intent/classify", json=payload)
+        resp = client.post("/api/intent/classify", json=payload, headers=headers)
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["classification"] == "ambiguous"
@@ -46,7 +48,7 @@ def test_intent_api_classify_and_resolve(db_session: Session):
             "clarification_prompt": data["clarification_prompt"],
             "selected_option": data["clarification_options"][0]
         }
-        resolve_resp = client.post("/api/intent/resolve", json=resolve_payload)
+        resolve_resp = client.post("/api/intent/resolve", json=resolve_payload, headers=headers)
         assert resolve_resp.status_code == 200
         resolved_text = resolve_resp.json()["data"]
         assert "What is our total revenue?" in resolved_text
@@ -58,7 +60,7 @@ def test_intent_api_classify_and_resolve(db_session: Session):
             "data_source_id": ds.data_source_id,
             "role_id": admin_role.role_id
         }
-        unsupp_resp = client.post("/api/intent/classify", json=unsupp_payload)
+        unsupp_resp = client.post("/api/intent/classify", json=unsupp_payload, headers=headers)
         assert unsupp_resp.status_code == 200
         unsupp_data = unsupp_resp.json()["data"]
         assert unsupp_data["classification"] == "unsupported"

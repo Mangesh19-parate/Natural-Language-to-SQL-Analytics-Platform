@@ -26,7 +26,7 @@ class AuthService:
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verifies a plain password against the stored hash, with fallback."""
+        """Verifies a plain password against the stored hash securely."""
         if not hashed_password or not plain_password:
             return False
         # Try passlib bcrypt
@@ -35,12 +35,9 @@ class AuthService:
                 return True
         except Exception:
             pass
-        # Fallback SHA256 verification if plain sha256 or mock hash was seeded
+        # Fallback standard SHA256 verification if legacy sha256 format was seeded
         sha_hash = hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
         if hashed_password == sha_hash or hashed_password == f"sha256:{sha_hash}":
-            return True
-        # Direct string fallback for test harness mock seeds
-        if hashed_password == plain_password or hashed_password == f"mock_hash_{plain_password}":
             return True
         return False
 
@@ -175,3 +172,18 @@ def require_roles(allowed_roles: List[str]):
         return current_user
 
     return role_checker
+
+
+def get_effective_role_id(current_user: User, requested_role_id: Optional[int] = None) -> int:
+    """
+    Derives the effective role ID strictly on the server side.
+    If the caller is an Admin, they are allowed to simulate other roles (e.g. for Policy Matrix/Labs).
+    For all non-admin users, their assigned database role_id is strictly enforced and client requests are ignored.
+    """
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name == "admin" and requested_role_id is not None:
+        return requested_role_id
+    if current_user.role_id is not None:
+        return current_user.role_id
+    return 3  # Fallback to viewer role if unassigned
+

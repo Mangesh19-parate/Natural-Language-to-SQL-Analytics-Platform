@@ -4,22 +4,22 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.schemas.visualization import ChartType
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
-from app.models.auth import Role
+from tests.conftest import create_test_auth_headers
 
 
 @pytest.fixture
 def seed_vis_api_db(db_session: Session):
     """Sets up data source, role, catalog and policies for visualization integration testing."""
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     ds = DataSource(data_source_id=1, name="Vis Test DB", db_type="postgresql", secret_ref="env:TEST_SECRET", is_active=True)
-    role_admin = Role(role_id=1, role_name="admin")
-    db_session.add_all([ds, role_admin])
+    db_session.add(ds)
     db_session.flush()
 
     for tbl in ["departments", "employees", "customers", "products", "orders", "sales"]:
         db_session.add(DataPolicy(role_id=1, data_source_id=1, table_name=tbl, access_level="read", aggregate_allowed=True))
 
     db_session.commit()
-    return db_session
+    return {"headers": headers, "db": db_session}
 
 
 def test_vis_generate_chart_api():
@@ -62,9 +62,10 @@ def test_vis_supported_types_api():
     assert "table" in type_names
 
 
-def test_execute_endpoint_attaches_chart_spec(seed_vis_api_db: Session):
+def test_execute_endpoint_attaches_chart_spec(seed_vis_api_db: dict):
     """POST /api/sql/execute automatically attaches chart_spec to execution results (REQ-VIS-01)."""
     client = TestClient(app)
+    headers = seed_vis_api_db["headers"]
     exec_payload = {
         "sql": "SELECT department_name, count(*) as emp_count FROM departments GROUP BY department_name",
         "data_source_id": 1,
@@ -72,7 +73,7 @@ def test_execute_endpoint_attaches_chart_spec(seed_vis_api_db: Session):
         "question": "Count of employees per department",
     }
 
-    response = client.post("/api/sql/execute", json=exec_payload)
+    response = client.post("/api/sql/execute", json=exec_payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True

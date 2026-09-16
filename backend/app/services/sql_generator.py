@@ -24,7 +24,7 @@ class SQLGeneratorService:
     """
 
     def __init__(self, llm_provider: Optional[LLMProviderService] = None):
-        self.llm_provider = llm_provider or LLMProviderService(provider="mock")
+        self.llm_provider = llm_provider or LLMProviderService.get_default_provider()
 
     @staticmethod
     def _extract_json(text: str) -> Dict[str, Any]:

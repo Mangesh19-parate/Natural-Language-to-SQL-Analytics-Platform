@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.session import QueryHistory
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
 from app.models.auth import Role
+from tests.conftest import create_test_auth_headers
 
 
 client = TestClient(app)
@@ -45,13 +46,14 @@ def seed_reliability_api_data(db_session: Session):
 
 def test_execute_endpoint_attaches_reliability_breakdown(seed_reliability_api_data: dict):
     """Verify that /api/sql/execute returns a complete, deterministic reliability breakdown."""
+    headers = create_test_auth_headers(seed_reliability_api_data["db"], role_name="admin", user_id=1)
     payload = {
         "sql": "SELECT customer_name, city FROM customers WHERE total_spent > 100",
         "data_source_id": seed_reliability_api_data["ds_id"],
         "role_id": seed_reliability_api_data["role_id"],
         "auto_correct": True,
     }
-    response = client.post("/api/sql/execute", json=payload)
+    response = client.post("/api/sql/execute", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True
@@ -80,6 +82,7 @@ def test_execute_endpoint_attaches_reliability_breakdown(seed_reliability_api_da
 def test_execute_endpoint_persists_reliability_breakdown(seed_reliability_api_data: dict):
     """Verify that query_history records the reliability_breakdown payload."""
     db_session = seed_reliability_api_data["db"]
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     query_id = "test-q-rel-001"
     q_hist = QueryHistory(
         query_id=query_id,
@@ -95,7 +98,7 @@ def test_execute_endpoint_persists_reliability_breakdown(seed_reliability_api_da
         "role_id": seed_reliability_api_data["role_id"],
         "query_id": query_id,
     }
-    response = client.post("/api/sql/execute", json=payload)
+    response = client.post("/api/sql/execute", json=payload, headers=headers)
     assert response.status_code == 200
     
     # Reload and verify DB persistence
@@ -108,12 +111,13 @@ def test_execute_endpoint_persists_reliability_breakdown(seed_reliability_api_da
 
 def test_generate_endpoint_attaches_pre_execution_reliability(seed_reliability_api_data: dict):
     """Verify that /api/sql/generate includes pre-execution reliability evaluation."""
+    headers = create_test_auth_headers(seed_reliability_api_data["db"], role_name="admin", user_id=1)
     payload = {
         "question": "Show top 5 customers by total spent",
         "data_source_id": seed_reliability_api_data["ds_id"],
         "role_id": seed_reliability_api_data["role_id"],
     }
-    response = client.post("/api/sql/generate", json=payload)
+    response = client.post("/api/sql/generate", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert "reliability_breakdown" in data
@@ -123,12 +127,13 @@ def test_generate_endpoint_attaches_pre_execution_reliability(seed_reliability_a
 
 def test_execute_policy_rejection_reliability(seed_reliability_api_data: dict):
     """Verify that policy rejections produce LOW reliability breakdown."""
+    headers = create_test_auth_headers(seed_reliability_api_data["db"], role_name="admin", user_id=1)
     payload = {
         "sql": "DROP TABLE customers",
         "data_source_id": seed_reliability_api_data["ds_id"],
         "role_id": seed_reliability_api_data["role_id"],
     }
-    response = client.post("/api/sql/execute", json=payload)
+    response = client.post("/api/sql/execute", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is False

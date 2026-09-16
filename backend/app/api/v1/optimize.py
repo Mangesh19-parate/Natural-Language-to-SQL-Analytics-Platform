@@ -6,12 +6,14 @@ from sqlalchemy import Engine
 
 from app.db.session import get_db, get_business_db, business_engine
 from app.models.trust import OptimizationSuggestion
+from app.models.auth import User
 from app.schemas.optimize import (
     OptimizeExplainRequest,
     OptimizeAnalyzeRequest,
     OptimizeResponse,
     OptimizationItem,
 )
+from app.services.auth_service import get_current_user, require_roles
 from app.services.optimizer import QueryOptimizerService
 
 router = APIRouter(prefix="", tags=["Optimization"])
@@ -24,6 +26,7 @@ router = APIRouter(prefix="", tags=["Optimization"])
 )
 def optimize_explain(
     request: OptimizeExplainRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -84,24 +87,18 @@ def optimize_explain(
 )
 def optimize_analyze(
     request: OptimizeAnalyzeRequest,
+    current_user: User = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
 ):
     """
-    Opt-in EXPLAIN ANALYZE execution. Strictly gated to admin role.
+    Opt-in EXPLAIN ANALYZE execution. Strictly gated to admin role on the server side (REQ-OPT-02 / Rule R0).
     Runs inside read-only execution sandbox with query timeout and row limit enforcement.
     """
-    # Hard Role Gate (REQ-OPT-02)
-    if request.role_name.lower() != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"EXPLAIN ANALYZE mode is restricted to administrators. Current role '{request.role_name}' is unauthorized.",
-        )
-
     try:
         plan_raw, plan_summary, exec_stats = QueryOptimizerService.run_explain_analyze(
             business_engine,
             request.sql,
-            role=request.role_name,
+            role="admin",
             timeout_seconds=10.0,
         )
 
