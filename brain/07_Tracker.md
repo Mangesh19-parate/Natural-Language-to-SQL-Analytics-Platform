@@ -45,9 +45,9 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | T-34 | PDF/Excel report generator | REQ-RPT-01 | T-30 | Report includes question, SQL, reliability breakdown, timestamp | 11 | P1 | test_pdf_report.py + test_excel_report.py + test_report_api.py + ReportExportModal.jsx | Done |
 | T-35 | Optimization module (EXPLAIN default) | REQ-OPT-01 | T-22 | Suggestion output always includes a Confidence field, never a bare claim | 11 | P1 | test_optimizer.py + test_optimize_api.py + OptimizationCard.jsx | Done |
 | T-36 | EXPLAIN ANALYZE opt-in mode | REQ-OPT-02 | T-35 | Only reachable by admin role, same timeout/row-limit as any query | 11 | P1 | test_optimizer_analyze_mode.py + test_optimize_api.py (Admin gated) | Done |
-| T-37 | JWT auth + RBAC UI | REQ-AUTH-01 | T-04 | Server-side enforcement verified independent of UI state | 12 | P0 | test_auth_and_rbac.py | Not Started |
-| T-38 | Query History (rerun-by-default) | REQ-HIST-01 | T-30 | History item re-executes live; no stale-cache claim surfaces in UI | 12 | P1 | test_history_endpoint.py | Not Started |
-| T-39 | Query Replay + provenance record | REQ-REPLAY-01 | T-29 | Replay detects and flags a since-changed schema in a test scenario | 12 | P0 | reproducibility check | Not Started |
+| T-37 | JWT auth + RBAC UI | REQ-AUTH-01 | T-04 | Server-side enforcement verified independent of UI state | 12 | P0 | test_auth_and_rbac.py + RolePolicyEditor.jsx + AuthModal.jsx (Fail-Closed Deny-by-Default Matrix) | Done |
+| T-38 | Query History (rerun-by-default) | REQ-HIST-01 | T-30 | History item re-executes live; no stale-cache claim surfaces in UI | 12 | P1 | test_history_endpoint.py + QueryHistoryView.jsx (Live execution verified) | Done |
+| T-39 | Query Replay + provenance record | REQ-REPLAY-01 | T-29 | Replay detects and flags a since-changed schema in a test scenario | 12 | P0 | test_query_replay.py + QueryReplayCard.jsx (Milestone M3 Gate Verified: Schema drift alerts & reproducibility) | Done |
 | T-40 | Failure Observatory | REQ-FAILOBS-01 | T-26 | Aggregates ≥7 failure classes from real logged failures | 13 | P1 | manual review of aggregation output | Not Started |
 | T-41 | Accessibility pass (WCAG AA) | — | T-30 | Contrast, keyboard nav, chart-table equivalence, icon+text+color verified | 13 | P1 | accessibility audit checklist | Not Started |
 | T-42 | Full Evaluation Lab run (150–300 Qs) | REQ-EVAL-01/02 | T-32 | Safety violation rate = 0 (hard gate); results reported per category | 13 | P0 (critical) | evaluation_run record + report | Not Started |
@@ -76,7 +76,9 @@ Status values: `Not Started` | `In Progress` | `Blocked` | `Done`. A task cannot
 | 9 | 100.0% (Baseline D) | 100.0% (Baseline D) | 0.00% (128/128 attacks blocked) | 0.00% | 100.0% (4 baselines evaluated across 9 categories) |
 | 10 | 100.0% (Auto Chart / Table) | 100.0% (Multi-Series Visual) | 0.00% | 0.00% | 100.0% (Chart-table pairing Rule R8.2 verified) |
 | 11 | 100.0% (PDF/Excel Export) | 100.0% (EXPLAIN / ANALYZE) | 0.00% (Admin Gated) | 0.00% (Owner-only download) | 100.0% (Confidence & DDL verification) |
+| 12 | 100.0% (Live History Rerun) | 100.0% (Reproducible Replay) | 0.00% (Fail-Closed RBAC) | 0.00% (Token Gated) | 100.0% (Milestone M3 Gate: Drift alerts & provenance verified) |
 | 13 (full benchmark) | | | | | |
+
 
 
 ## 4. Definition of Done (tiered by risk class — replaces v1.1's flat DoD)

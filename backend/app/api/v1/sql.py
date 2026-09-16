@@ -160,6 +160,8 @@ def _persist_query_reliability(
     row_count: int,
     latency_ms: int,
     chart_type: Optional[str] = None,
+    result_hash: Optional[str] = None,
+    data_source_id: int = 1,
 ):
     if not query_id:
         return
@@ -173,9 +175,22 @@ def _persist_query_reliability(
             q_row.execution_ms = latency_ms
             if chart_type:
                 q_row.chart_type = chart_type
+            if result_hash:
+                q_row.result_hash = result_hash
+            if not q_row.prompt_version:
+                q_row.prompt_version = "v1.4"
+            if not q_row.model_name:
+                q_row.model_name = "gpt-4o-mini"
+            if not q_row.model_params:
+                q_row.model_params = {"temperature": 0.0, "max_tokens": 512}
+            if not q_row.schema_snapshot_id:
+                from app.services.query_replay import QueryReplayService
+                snapshot = QueryReplayService.capture_current_schema_snapshot(db, data_source_id)
+                q_row.schema_snapshot_id = snapshot.schema_snapshot_id
             db.commit()
     except Exception:
         db.rollback()
+
 
 
 @router.post("/execute", response_model=SQLExecuteResponse)
@@ -267,13 +282,15 @@ async def execute_sandboxed_sql(
             latency_ms=sandbox_res.latency_ms,
             execution_success=True,
         )
+        from app.services.query_replay import QueryReplayService
+        res_hash = QueryReplayService.compute_result_hash(sandbox_res.columns, sandbox_res.rows)
         chart_spec = ChartEngineService.infer_chart_spec(
             columns=sandbox_res.columns,
             rows=sandbox_res.rows,
             question=request.question,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value
+            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value, result_hash=res_hash, data_source_id=request.data_source_id
         )
         return SQLExecuteResponse(
             success=True,

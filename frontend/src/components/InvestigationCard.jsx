@@ -6,6 +6,8 @@ import ChartRenderer from './ChartRenderer.jsx';
 import ChartSwitcher from './ChartSwitcher.jsx';
 import OptimizationCard from './OptimizationCard.jsx';
 import ReportExportModal from './ReportExportModal.jsx';
+import QueryReplayCard from './QueryReplayCard.jsx';
+
 
 export default function InvestigationCard({
   question,
@@ -578,7 +580,6 @@ export default function InvestigationCard({
               border: activeTab === 'optimize' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
               borderRadius: '6px',
               padding: '0.4rem 0.8rem',
-              fontSize: '0.82rem',
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
@@ -589,6 +590,28 @@ export default function InvestigationCard({
             <span>⚡</span>
             <span>Optimize</span>
           </button>
+
+
+          <button
+            onClick={() => setActiveTab('replay')}
+            style={{
+              background: activeTab === 'replay' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+              color: activeTab === 'replay' ? '#818cf8' : '#94a3b8',
+              border: activeTab === 'replay' ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid transparent',
+              borderRadius: '6px',
+              padding: '0.4rem 0.8rem',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+            }}
+          >
+            <span>🔬</span>
+            <span>Replay &amp; Provenance</span>
+          </button>
+
 
           {correctionResult && (
             <button
@@ -607,6 +630,7 @@ export default function InvestigationCard({
               ↻ Self-Correction Diff ({correctionResult.retries_used})
             </button>
           )}
+
 
           {copyFeedback && (
             <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
@@ -926,8 +950,16 @@ export default function InvestigationCard({
               roleName="Admin"
             />
           )}
+
+          {/* TAB 8: QUERY REPLAY & PROVENANCE (REQ-REPLAY-01 / Milestone M3) */}
+          {activeTab === 'replay' && (
+            <QueryReplayCard
+              queryId={executionResult?.query_id || proposalData?.query_id}
+            />
+          )}
         </div>
       </div>
+
 
       {/* Export Report Modal (REQ-RPT-01 / REQ-RPT-02 / Rule R8.3) */}
       <ReportExportModal

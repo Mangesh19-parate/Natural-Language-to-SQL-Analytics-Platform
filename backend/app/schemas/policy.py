@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class PolicyViolationType(str, Enum):
@@ -58,6 +58,55 @@ class DataPolicyCreate(BaseModel):
     row_filter_sql: Optional[str] = None
 
 
+class DataPolicyUpdate(BaseModel):
+    access_level: Optional[str] = None  # 'denied' | 'read' | 'read_aggregate_only'
+    aggregate_allowed: Optional[bool] = None
+    row_filter_sql: Optional[str] = None
+
+
+class DataPolicyOut(BaseModel):
+    policy_id: int
+    role_id: int
+    role_name: Optional[str] = None
+    data_source_id: int
+    table_name: str
+    column_name: Optional[str] = None
+    access_level: str
+    aggregate_allowed: bool
+    row_filter_sql: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolicyMatrixColumnItem(BaseModel):
+    column_name: str
+    access_level: str
+    aggregate_allowed: bool
+    is_explicit: bool
+    is_fail_closed_denied: bool
+    sensitivity: Optional[str] = "NONE"
+    semantic_type: Optional[str] = None
+    policy_id: Optional[int] = None
+
+
+class PolicyMatrixTableItem(BaseModel):
+    table_name: str
+    access_level: str
+    aggregate_allowed: bool
+    row_filter_sql: Optional[str] = None
+    is_explicit: bool
+    is_fail_closed_denied: bool
+    policy_id: Optional[int] = None
+    columns: List[PolicyMatrixColumnItem] = Field(default_factory=list)
+
+
+class DataPolicyMatrixResponse(BaseModel):
+    role_id: int
+    role_name: str
+    data_source_id: int
+    tables: List[PolicyMatrixTableItem] = Field(default_factory=list)
+
+
 class EffectiveTablePolicy(BaseModel):
     table_name: str
     accessible: bool = False
@@ -72,3 +121,4 @@ class EffectivePolicySummary(BaseModel):
     role_id: int
     data_source_id: int
     accessible_tables: Dict[str, EffectiveTablePolicy] = {}
+
