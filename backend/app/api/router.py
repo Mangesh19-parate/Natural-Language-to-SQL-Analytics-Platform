@@ -11,6 +11,7 @@ from app.api.v1.optimize import router as optimize_router
 from app.api.v1.policy import router as policy_router
 from app.api.v1.history import router as history_router
 from app.api.v1.replay import router as replay_router
+from app.api.v1.observatory import router as observatory_router
 
 api_router = APIRouter()
 
@@ -26,6 +27,8 @@ api_router.include_router(optimize_router, prefix="/optimize")
 api_router.include_router(policy_router, prefix="")
 api_router.include_router(history_router, prefix="")
 api_router.include_router(replay_router, prefix="")
+api_router.include_router(observatory_router, prefix="")
+
 
 
 

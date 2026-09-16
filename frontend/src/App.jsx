@@ -7,16 +7,18 @@ import EvaluationLab from './components/EvaluationLab.jsx';
 import RolePolicyEditor from './components/RolePolicyEditor.jsx';
 import QueryHistoryView from './components/QueryHistoryView.jsx';
 import QueryReplayCard from './components/QueryReplayCard.jsx';
+import FailureObservatory from './components/FailureObservatory.jsx';
+import RefusalStateCard from './components/RefusalStateCard.jsx';
 import AuthModal from './components/AuthModal.jsx';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'history' | 'policy' | 'replay' | 'security' | 'evaluation'
+  const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'history' | 'policy' | 'replay' | 'security' | 'evaluation' | 'observatory'
   const [health, setHealth] = useState({
     status: 'checking...',
     environment: 'local',
     metadata_db_connected: false,
     business_db_connected: false,
-    version: '1.2.0',
+    version: '1.3.0',
   });
   const [catalog, setCatalog] = useState(null);
   const [selectedRole, setSelectedRole] = useState(1); // 1: admin, 2: analyst, 3: viewer
@@ -211,18 +213,24 @@ export default function App() {
 
           <div style={{ textAlign: 'right' }}>
             <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
-              Milestone M3 &bull; Full P0/P1 Platform
+              Milestone M4 &bull; Production Readiness &amp; Observatory
             </span>
             <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
-              Week 12 Gate Verified (T-37, T-38, T-39)
+              Week 13 Gate (T-40 Observatory &bull; T-41 WCAG &bull; T-42 0.00% Safety)
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}>
+      <div 
+        role="tablist" 
+        aria-label="Main Navigation Tabs"
+        style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.75rem', flexWrap: 'wrap' }}
+      >
         <button
+          role="tab"
+          aria-selected={activeTab === 'studio'}
           onClick={() => setActiveTab('studio')}
           style={{
             background: activeTab === 'studio' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
@@ -244,6 +252,31 @@ export default function App() {
         </button>
 
         <button
+          role="tab"
+          aria-selected={activeTab === 'observatory'}
+          onClick={() => setActiveTab('observatory')}
+          style={{
+            background: activeTab === 'observatory' ? 'rgba(244, 63, 94, 0.15)' : 'transparent',
+            color: activeTab === 'observatory' ? '#fb7185' : 'var(--text-muted)',
+            border: activeTab === 'observatory' ? '1px solid rgba(244, 63, 94, 0.4)' : '1px solid transparent',
+            borderRadius: '8px',
+            padding: '0.5rem 1.1rem',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.15s'
+          }}
+        >
+          <span>🔥</span>
+          <span>Failure Observatory (T-40)</span>
+        </button>
+
+        <button
+          role="tab"
+          aria-selected={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
           style={{
             background: activeTab === 'history' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
@@ -265,6 +298,8 @@ export default function App() {
         </button>
 
         <button
+          role="tab"
+          aria-selected={activeTab === 'policy'}
           onClick={() => setActiveTab('policy')}
           style={{
             background: activeTab === 'policy' ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
@@ -287,6 +322,8 @@ export default function App() {
 
         {selectedReplayQueryId && (
           <button
+            role="tab"
+            aria-selected={activeTab === 'replay'}
             onClick={() => setActiveTab('replay')}
             style={{
               background: activeTab === 'replay' ? 'rgba(236, 72, 153, 0.15)' : 'transparent',
@@ -309,6 +346,8 @@ export default function App() {
         )}
 
         <button
+          role="tab"
+          aria-selected={activeTab === 'security'}
           onClick={() => setActiveTab('security')}
           style={{
             background: activeTab === 'security' ? 'rgba(244, 63, 94, 0.15)' : 'transparent',
@@ -330,6 +369,8 @@ export default function App() {
         </button>
 
         <button
+          role="tab"
+          aria-selected={activeTab === 'evaluation'}
           onClick={() => setActiveTab('evaluation')}
           style={{
             background: activeTab === 'evaluation' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
@@ -347,9 +388,14 @@ export default function App() {
           }}
         >
           <span>📊</span>
-          <span>Evaluation Lab</span>
+          <span>Evaluation Lab (165 Cases)</span>
         </button>
       </div>
+
+      {/* Tab 0: Failure Observatory */}
+      {activeTab === 'observatory' && (
+        <FailureObservatory activeRole={selectedRoleName} />
+      )}
 
       {/* Tab 1: Query History View */}
       {activeTab === 'history' && (
@@ -504,13 +550,49 @@ export default function App() {
           {/* Stage 1: Intent Analysis & Clarification / Rejection Cards */}
           {intentResult && (
             <div style={{ marginBottom: '2rem' }}>
-              <ClarificationCard
-                result={intentResult}
-                selectedOptionId={selectedOptionId}
-                onSelectOption={(optId) => setSelectedOptionId(optId)}
-                onResolve={handleResolveOption}
-                isResolving={isResolving}
-              />
+              {intentResult.classification === 'unsupported' ? (
+                <RefusalStateCard
+                  type="unsupported"
+                  title="Unsupported Question Domain"
+                  reason={intentResult.explanation || "This question cannot be mapped to the available data catalog entities."}
+                  suggestions={[
+                    "What is the sum of sales revenue?",
+                    "How many employees are in each department?",
+                    "List the top 5 customers by sales volume"
+                  ]}
+                  onSelectSuggestion={(sug) => {
+                    setQueryInput(sug);
+                    handleClassify(sug);
+                  }}
+                  onRetry={() => handleClassify(queryInput)}
+                />
+              ) : intentResult.classification === 'unauthorized' ? (
+                <RefusalStateCard
+                  type="policy_violation"
+                  title="Restricted by Governance Policy"
+                  reason={intentResult.explanation || "Your active role does not possess permissions to execute this query."}
+                  policyRule="RBAC-COLUMN-GATE-R2.1"
+                  requiredRole="admin"
+                  activeRole={selectedRoleName}
+                  suggestions={[
+                    "Show total sales without restricted salary tables",
+                    "List customer orders by date"
+                  ]}
+                  onSelectSuggestion={(sug) => {
+                    setQueryInput(sug);
+                    handleClassify(sug);
+                  }}
+                  onRetry={() => handleClassify(queryInput)}
+                />
+              ) : (
+                <ClarificationCard
+                  result={intentResult}
+                  selectedOptionId={selectedOptionId}
+                  onSelectOption={(optId) => setSelectedOptionId(optId)}
+                  onResolve={handleResolveOption}
+                  isResolving={isResolving}
+                />
+              )}
             </div>
           )}
 

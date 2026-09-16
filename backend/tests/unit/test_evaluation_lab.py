@@ -47,14 +47,14 @@ def seed_eval_lab_db(db_session: Session):
 
 
 def test_benchmark_questions_compilation():
-    """Verify that benchmark suite has 30 questions across all 9 categories."""
+    """Verify that benchmark suite has 165 questions across all 10 categories (REQ-EVAL-01 / Milestone M4)."""
     questions = EvaluationLabService.get_benchmark_questions()
-    assert len(questions) == 30
+    assert len(questions) == 165
     
     categories = {q.category for q in questions}
     expected_categories = {
         "simple", "temporal", "join", "nested", "ambiguous",
-        "adversarial", "invalid", "unauthorized", "optimization"
+        "adversarial", "invalid", "unauthorized", "optimization", "calculation"
     }
     assert expected_categories.issubset(categories)
 
