@@ -85,3 +85,15 @@ def log_failure_event(
         message="Failure event logged",
         data=FailureLogItem.model_validate(record),
     )
+
+
+@router.get("/metrics")
+def get_observatory_telemetry_metrics():
+    """
+    Retrieves runtime telemetry, request rates, uptime, and violation metrics for dashboard monitoring.
+    """
+    from app.core.metrics import metrics
+    return {
+        "success": True,
+        "data": metrics.export_summary_json(),
+    }
