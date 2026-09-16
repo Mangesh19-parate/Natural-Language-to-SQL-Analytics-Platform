@@ -256,3 +256,55 @@ def test_plaintext_password_rejected():
     # Bcrypt matches properly
     hashed = AuthService.get_password_hash(raw_pw)
     assert AuthService.verify_password(raw_pw, hashed) is True
+
+
+def test_cross_user_query_replay_blocked(security_test_context, db_session):
+    """User B (Analyst) attempting to access User A's (Admin) query provenance/replay gets 403 Forbidden."""
+    admin_user = security_test_context["users"]["admin"]
+    analyst_token = security_test_context["tokens"]["analyst"]
+    analyst_headers = {"Authorization": f"Bearer {analyst_token}"}
+
+    # Seed query belonging to admin
+    admin_query = QueryHistory(
+        user_id=admin_user.user_id,
+        nl_question="Admin confidential query",
+        final_sql="SELECT * FROM employees WHERE salary > 100000",
+        status="success",
+        row_count=5,
+    )
+    db_session.add(admin_query)
+    db_session.commit()
+
+    # Analyst attempts to get provenance for Admin's query
+    res = client.get(f"/api/replay/{admin_query.query_id}", headers=analyst_headers)
+    assert res.status_code == 403
+    assert "Access denied" in res.json()["detail"]
+
+    # Analyst attempts to replay Admin's query
+    res_post = client.post(f"/api/replay/{admin_query.query_id}", headers=analyst_headers)
+    assert res_post.status_code == 403
+    assert "Access denied" in res_post.json()["detail"]
+
+
+def test_policy_matrix_non_admin_cross_role_blocked(security_test_context):
+    """Non-admin (Analyst) requesting Admin role policy matrix receives 403 Forbidden."""
+    analyst_token = security_test_context["tokens"]["analyst"]
+    headers = {"Authorization": f"Bearer {analyst_token}"}
+
+    # Analyst requesting role_id=1 (Admin)
+    res = client.get("/api/policy/matrix?role_id=1", headers=headers)
+    assert res.status_code == 403
+    assert "Access denied" in res.json()["detail"]
+
+
+def test_unauthenticated_lab_and_observatory_control_planes_blocked():
+    """Unauthenticated clients attempting to trigger security/evaluation runs or log failure telemetry receive 401."""
+    res_sec = client.post("/api/lab/security/run", json={"data_source_id": 1})
+    assert res_sec.status_code == 401
+
+    res_eval = client.post("/api/lab/evaluation/run", json={"data_source_id": 1})
+    assert res_eval.status_code == 401
+
+    res_obs = client.post("/api/observatory/log", json={"failure_class": "syntax_error"})
+    assert res_obs.status_code == 401
+

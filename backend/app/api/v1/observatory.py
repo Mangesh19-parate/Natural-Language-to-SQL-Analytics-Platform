@@ -4,12 +4,14 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.db.session import get_db
+from app.models.auth import User
 from app.schemas.observatory import (
     FailureObservatoryStatsResponse,
     ProblematicPhraseItem,
     FailureLogItem,
 )
 from app.schemas.common import StandardResponse
+from app.services.auth_service import get_current_user
 from app.services.observatory_service import ObservatoryService
 
 router = APIRouter(prefix="/observatory", tags=["Failure Observatory"])
@@ -22,9 +24,13 @@ class LogFailureRequest(BaseModel):
 
 
 @router.get("/stats", response_model=StandardResponse[FailureObservatoryStatsResponse])
-def get_failure_observatory_stats(db: Session = Depends(get_db)):
+def get_failure_observatory_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """
     Retrieves Failure Observatory aggregation metrics across all 7 taxonomy classes (REQ-FAILOBS-01).
+    Protected by authenticated session.
     """
     stats = ObservatoryService.get_observatory_stats(db)
     return StandardResponse(
@@ -37,10 +43,12 @@ def get_failure_observatory_stats(db: Session = Depends(get_db)):
 @router.get("/phrases", response_model=StandardResponse[List[ProblematicPhraseItem]])
 def get_problematic_phrases(
     limit: int = Query(5, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Returns the top problematic natural-language phrases and recommended catalog interventions.
+    Protected by authenticated session.
     """
     phrases = ObservatoryService.get_top_problematic_phrases(db, limit=limit)
     return StandardResponse(
@@ -53,10 +61,12 @@ def get_problematic_phrases(
 @router.get("/logs", response_model=StandardResponse[List[FailureLogItem]])
 def get_recent_failure_logs(
     limit: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Returns recent failure log feed.
+    Protected by authenticated session.
     """
     logs = ObservatoryService.get_failure_logs(db, limit=limit)
     return StandardResponse(
@@ -69,10 +79,12 @@ def get_recent_failure_logs(
 @router.post("/log", response_model=StandardResponse[FailureLogItem])
 def log_failure_event(
     request: LogFailureRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Logs an explicit failure occurrence into the observatory stream.
+    Strictly authenticated to prevent malicious telemetry tampering or injection.
     """
     record = ObservatoryService.log_failure(
         db=db,
@@ -88,12 +100,16 @@ def log_failure_event(
 
 
 @router.get("/metrics")
-def get_observatory_telemetry_metrics():
+def get_observatory_telemetry_metrics(
+    current_user: User = Depends(get_current_user),
+):
     """
     Retrieves runtime telemetry, request rates, uptime, and violation metrics for dashboard monitoring.
+    Protected by authenticated session.
     """
     from app.core.metrics import metrics
     return {
         "success": True,
         "data": metrics.export_summary_json(),
     }
+

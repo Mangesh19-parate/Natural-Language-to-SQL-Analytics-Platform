@@ -10,10 +10,10 @@ def test_optimize_explain_endpoint(db_session: Session):
     Test POST /api/optimize/explain returns plan summary, structured suggestions with confidence and copyable DDL.
     """
     client = TestClient(app)
-    headers = create_test_auth_headers(db_session, role_name="analyst", user_id=1)
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
     payload = {
         "sql": "SELECT first_name, last_name, salary FROM employees WHERE salary > 75000;",
-        "role_name": "analyst",
+        "role_name": "admin",
     }
 
     res = client.post("/api/optimize/explain", json=payload, headers=headers)

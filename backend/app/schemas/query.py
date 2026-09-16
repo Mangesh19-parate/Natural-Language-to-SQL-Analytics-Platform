@@ -36,6 +36,10 @@ class SQLProposal(BaseModel):
     sql: str
     rationale: str
     is_proposal: bool = True
+    generation_mode: str = "live"  # 'live' | 'deterministic_fallback' | 'mock'
+    fallback_used: bool = False
+    provider_error: Optional[str] = None
+
 
 
 class SQLGenerateRequest(BaseModel):

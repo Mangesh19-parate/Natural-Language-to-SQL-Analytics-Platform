@@ -93,9 +93,8 @@ export default function OptimizationCard({
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '1.1rem' }}>⚡</span>
             <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
-              Query Optimization Engine (REQ-OPT-01 / REQ-OPT-02)
+              Query Optimization &amp; Index Advisor
             </span>
             <span
               style={{
@@ -108,7 +107,7 @@ export default function OptimizationCard({
                 border: `1px solid ${mode === 'explain_analyze' ? 'rgba(168, 85, 247, 0.4)' : 'rgba(59, 130, 246, 0.4)'}`,
               }}
             >
-              {mode === 'explain_analyze' ? '🔬 EXPLAIN ANALYZE (Live Live Sandboxed)' : '🛡️ Safe EXPLAIN (Plan-Only)'}
+              {mode === 'explain_analyze' ? 'EXPLAIN ANALYZE (Live Sandboxed)' : 'EXPLAIN (Plan-Only)'}
             </span>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.2rem' }}>

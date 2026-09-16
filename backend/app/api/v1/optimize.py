@@ -7,13 +7,15 @@ from sqlalchemy import Engine
 from app.db.session import get_db, get_business_db, business_engine
 from app.models.trust import OptimizationSuggestion
 from app.models.auth import User
+from app.models.session import QueryHistory
 from app.schemas.optimize import (
     OptimizeExplainRequest,
     OptimizeAnalyzeRequest,
     OptimizeResponse,
     OptimizationItem,
 )
-from app.services.auth_service import get_current_user, require_roles
+from app.services.auth_service import get_current_user, require_roles, authorize_resource_access
+from app.services.policy_engine import PolicyEngine
 from app.services.optimizer import QueryOptimizerService
 
 router = APIRouter(prefix="", tags=["Optimization"])
@@ -31,9 +33,26 @@ def optimize_explain(
 ):
     """
     Executes a plan-only EXPLAIN (safe, does not execute query).
+    Strictly validated by Policy Engine before EXPLAIN execution (SEC-OPT-POLICY).
     Identifies unindexed filters, expensive joins, and unindexed sort operations.
     Returns structured evidence and confidence ratings (Low / Medium / High).
     """
+    # 1. Deterministic Policy Gate check before EXPLAIN
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name != "admin":
+        policy_res = PolicyEngine.validate_sql(
+            db=db,
+            sql=request.sql,
+            role_id=current_user.role_id or 3,
+            data_source_id=1,
+        )
+        if not policy_res.is_allowed:
+            violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Policy violation in optimization candidate SQL: {violation_msg}",
+            )
+
     try:
         plan_raw, plan_summary = QueryOptimizerService.run_explain(business_engine, request.sql)
         suggestions = QueryOptimizerService.generate_suggestions(
@@ -158,11 +177,17 @@ def optimize_analyze(
 )
 def get_query_optimizations(
     query_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Retrieves stored optimization suggestions for a given query history record.
+    Enforces resource ownership access control.
     """
+    query_record = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+    if query_record:
+        authorize_resource_access(query_record.user_id, current_user, "optimization record", "view")
+
     records = db.query(OptimizationSuggestion).filter(OptimizationSuggestion.query_id == query_id).all()
     return {
         "success": True,
@@ -181,3 +206,4 @@ def get_query_optimizations(
             for r in records
         ],
     }
+

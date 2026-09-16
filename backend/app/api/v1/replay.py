@@ -4,12 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.auth import User
+from app.models.session import QueryHistory
 from app.schemas.replay import (
     ProvenancePackage,
     QueryReplayResponse,
 )
 from app.schemas.common import StandardResponse
-from app.services.auth_service import get_current_user, get_effective_role_id
+from app.services.auth_service import get_current_user, get_effective_role_id, authorize_resource_access
 from app.services.query_replay import QueryReplayService
 
 router = APIRouter(prefix="/replay", tags=["Query Replay & Provenance"])
@@ -25,7 +26,17 @@ def get_provenance_record(
     """
     Retrieves full reproducibility provenance package for a past query run (REQ-REPLAY-01),
     including schema snapshot comparison and schema drift alerts (Day 81–82).
+    Strictly enforces resource ownership: non-admin callers can only inspect their own queries.
     """
+    # 1. Authorize resource ownership
+    query_record = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+    if not query_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Query {query_id} not found",
+        )
+    authorize_resource_access(query_record.user_id, current_user, "query provenance", "view provenance for")
+
     try:
         provenance = QueryReplayService.get_provenance_package(
             db=db,
@@ -54,8 +65,18 @@ def replay_query_endpoint(
 ):
     """
     Executes a reproducible rerun of a past query run and computes result hash comparison (REQ-REPLAY-01).
+    Strictly enforces resource ownership: non-admin callers can only replay their own queries.
     Strictly derives effective role from authenticated session.
     """
+    # 1. Authorize resource ownership
+    query_record = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+    if not query_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Query {query_id} not found",
+        )
+    authorize_resource_access(query_record.user_id, current_user, "historical query", "replay")
+
     effective_role_id = get_effective_role_id(current_user, role_id)
 
     try:

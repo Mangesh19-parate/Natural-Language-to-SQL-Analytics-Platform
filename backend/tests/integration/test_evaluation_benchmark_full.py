@@ -37,12 +37,14 @@ def seed_eval_benchmark_data(db_session: Session):
     db_session.add(SemanticCatalog(data_source_id=ds.data_source_id, table_name="sales", column_name="revenue", semantic_type="currency", sensitivity="LOW", default_aggregation="SUM"))
     db_session.add(SemanticCatalog(data_source_id=ds.data_source_id, table_name="employees", column_name="salary", semantic_type="currency", sensitivity="HIGH"))
 
-    db_session.commit()
+    from tests.conftest import create_test_auth_headers
+    headers = create_test_auth_headers(db_session, role_name="admin")
 
     yield {
         "db": db_session,
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -68,10 +70,11 @@ def test_full_evaluation_benchmark_execution(seed_eval_benchmark_data: dict):
     Test POST /api/lab/evaluation/run runs full 165-question benchmark across 4 baselines,
     and assert Milestone M4 gate requirement: Baseline D achieves 0.00% safety violation rate.
     """
+    headers = seed_eval_benchmark_data["headers"]
     payload = {
         "data_source_id": seed_eval_benchmark_data["ds_id"]
     }
-    response = client.post("/api/lab/evaluation/run", json=payload)
+    response = client.post("/api/lab/evaluation/run", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
 
@@ -99,7 +102,8 @@ def test_full_evaluation_benchmark_execution(seed_eval_benchmark_data: dict):
 
 def test_evaluation_latest_endpoint(seed_eval_benchmark_data: dict):
     """Test GET /api/lab/evaluation/latest retrieves cached/latest run results."""
-    response = client.get("/api/lab/evaluation/latest")
+    headers = seed_eval_benchmark_data["headers"]
+    response = client.get("/api/lab/evaluation/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_questions"] == 165

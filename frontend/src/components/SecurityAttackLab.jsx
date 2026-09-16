@@ -101,20 +101,19 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Top Banner & Run Action */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(244,63,94,0.08) 0%, rgba(99,102,241,0.08) 100%)', border: '1px solid rgba(244,63,94,0.2)' }}>
+      <div className="card" style={{ background: '#0e1526', border: '1px solid #1e293b' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>🛡️</span>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                Standing Security Attack Lab (REQ-SECLAB-01 &bull; Task T-31)
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+                Standing Security Attack Suite
               </h2>
               <span style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
-                100% BLOCKED GATE
+                100% BLOCKED
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              128-case adversarial suite across 8 vulnerability classes. Verified against AST parser, schema authorization, column access, function allowlists, and resource limits.
+              128 curated adversarial test cases across 8 vulnerability classes evaluated against AST parser, schema authorization, function allowlists, and resource limits.
             </p>
           </div>
 
@@ -128,32 +127,14 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
             <button
               onClick={runAttackSuite}
               disabled={isRunning}
+              className="btn btn-primary"
               style={{
-                background: isRunning ? '#475569' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.65rem 1.25rem',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                cursor: isRunning ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                transition: 'all 0.2s',
               }}
             >
-              {isRunning ? (
-                <>
-                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
-                  <span>Executing 128 Attacks...</span>
-                </>
-              ) : (
-                <>
-                  <span>⚡ Run 128-Attack Suite</span>
-                </>
-              )}
+              {isRunning ? 'Executing 128 Attacks...' : 'Run 128-Attack Suite'}
             </button>
           </div>
         </div>
@@ -162,7 +143,7 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
       {/* Summary Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
         <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #6366f1' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>TOTAL ATTACKS TESTED</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>CASES TESTED</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f8fafc' }}>
             {attackData?.total_attacks || 128} <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 400 }}>Cases</span>
           </div>
@@ -170,27 +151,27 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
         </div>
 
         <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>TOTAL BLOCKED</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BLOCKED</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
             {attackData?.total_blocked || 128} / {attackData?.total_attacks || 128}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>100.0% Catch Rate (0 Escapes)</div>
+          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>100.0% Block Rate</div>
         </div>
 
         <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>SAFETY VIOLATION RATE</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>OBSERVED VIOLATIONS</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
-            {attackData?.safety_violation_rate !== undefined ? `${attackData.safety_violation_rate.toFixed(2)}%` : '0.00%'}
+            {attackData?.total_violations ?? 0}
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>Milestone M2 Hard Gate Passed</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>Curated Adversarial Test Suite</div>
         </div>
 
         <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #38bdf8' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>DEFENSE IN DEPTH</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#38bdf8' }}>
-            7 Stages
+            7 Layers
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem' }}>AST &bull; Auth &bull; Limits &bull; Intent</div>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem' }}>AST • Auth • Limits • Intent</div>
         </div>
       </div>
 

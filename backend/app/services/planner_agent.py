@@ -266,10 +266,19 @@ class PlannerAgentService:
     ) -> PlanCompoundAnalysisResponse:
         """
         Executes multi-step compound plan enforcing deterministic Policy Engine per sub-step.
+        Uses validated DAG decomposition with cycle safety (SEC-DAG-01).
         """
         start_time = time.time()
         is_compound = cls.is_compound_query(question)
-        sub_tasks = cls.decompose_compound_query(question)
+
+        # Decompose to DAG using DAGPlannerService
+        from app.services.dag_planner import DAGPlannerService
+        sub_tasks, plan_explanation = await DAGPlannerService.decompose_to_dag(
+            question=question,
+            db=db,
+            role_id=role_id,
+            data_source_id=data_source_id,
+        )
 
         step_results: List[PlanStepResult] = []
         all_authorized = True

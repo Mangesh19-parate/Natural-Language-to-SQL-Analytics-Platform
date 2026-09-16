@@ -6,15 +6,15 @@ export default function ChartSwitcher({
   onSelectType,
 }) {
   const allTypes = [
-    { key: 'bar', label: 'Vertical Bar', icon: '📊' },
-    { key: 'horizontal_bar', label: 'Horizontal Bar', icon: '📶' },
-    { key: 'line', label: 'Line Curve', icon: '📈' },
-    { key: 'area', label: 'Area Chart', icon: '🌊' },
-    { key: 'donut', label: 'Donut', icon: '🍩' },
-    { key: 'pie', label: 'Pie', icon: '🥧' },
-    { key: 'kpi_metric', label: 'KPI Metric', icon: '🔢' },
-    { key: 'scatter', label: 'Scatter', icon: '⁖' },
-    { key: 'table', label: 'Data Grid', icon: '📋' },
+    { key: 'bar', label: 'Bar' },
+    { key: 'horizontal_bar', label: 'H-Bar' },
+    { key: 'line', label: 'Line' },
+    { key: 'area', label: 'Area' },
+    { key: 'donut', label: 'Donut' },
+    { key: 'pie', label: 'Pie' },
+    { key: 'kpi_metric', label: 'KPI' },
+    { key: 'scatter', label: 'Scatter' },
+    { key: 'table', label: 'Table' },
   ];
 
   // Filter to suggested types + allow switching to common ones
@@ -48,7 +48,6 @@ export default function ChartSwitcher({
               transition: 'all 0.15s ease',
             }}
           >
-            <span>{t.icon}</span>
             <span>{t.label}</span>
           </button>
         );

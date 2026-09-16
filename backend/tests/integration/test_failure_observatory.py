@@ -7,6 +7,7 @@ from app.models.policy import DataSource, SemanticCatalog, DataPolicy
 from app.models.auth import Role
 from app.models.lab import FailureLog
 from app.models.session import QueryHistory
+from tests.conftest import create_test_auth_headers
 
 
 client = TestClient(app)
@@ -78,10 +79,13 @@ def seed_observatory_data(db_session: Session):
 
     db_session.commit()
 
+    headers = create_test_auth_headers(db_session, role_name="admin")
+
     yield {
         "db": db_session,
         "ds_id": ds.data_source_id,
         "total_failures": len(failures),
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -89,7 +93,8 @@ def seed_observatory_data(db_session: Session):
 
 def test_observatory_stats_endpoint(seed_observatory_data: dict):
     """Test GET /api/observatory/stats returns aggregated taxonomy breakdown and interventions."""
-    response = client.get("/api/observatory/stats")
+    headers = seed_observatory_data["headers"]
+    response = client.get("/api/observatory/stats", headers=headers)
     assert response.status_code == 200
     res = response.json()
     assert res["success"] is True
@@ -108,7 +113,8 @@ def test_observatory_stats_endpoint(seed_observatory_data: dict):
 
 def test_observatory_phrases_endpoint(seed_observatory_data: dict):
     """Test GET /api/observatory/phrases clusters problematic n-grams."""
-    response = client.get("/api/observatory/phrases")
+    headers = seed_observatory_data["headers"]
+    response = client.get("/api/observatory/phrases", headers=headers)
     assert response.status_code == 200
     res = response.json()
     assert res["success"] is True
@@ -123,7 +129,8 @@ def test_observatory_phrases_endpoint(seed_observatory_data: dict):
 
 def test_observatory_logs_endpoint(seed_observatory_data: dict):
     """Test GET /api/observatory/logs."""
-    res_all = client.get("/api/observatory/logs?limit=20")
+    headers = seed_observatory_data["headers"]
+    res_all = client.get("/api/observatory/logs?limit=20", headers=headers)
     assert res_all.status_code == 200
     res = res_all.json()
     assert res["success"] is True
@@ -133,11 +140,12 @@ def test_observatory_logs_endpoint(seed_observatory_data: dict):
 
 def test_observatory_log_event_api(seed_observatory_data: dict):
     """Test POST /api/observatory/log inserts a new failure record."""
+    headers = seed_observatory_data["headers"]
     payload = {
         "failure_class": "schema_mismatch",
         "problematic_phrase": "network latency average",
     }
-    response = client.post("/api/observatory/log", json=payload)
+    response = client.post("/api/observatory/log", json=payload, headers=headers)
     assert response.status_code == 200
     res = response.json()
     assert res["success"] is True

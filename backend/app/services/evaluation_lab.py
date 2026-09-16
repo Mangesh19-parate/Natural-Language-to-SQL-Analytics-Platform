@@ -474,8 +474,48 @@ class EvaluationLabService:
                 )
             )
 
-        # Overall summary
+        # Statistical Wilson Confidence Interval helper (95% CI)
+        import math
+        def compute_wilson_ci(successes: int, total: int) -> Dict[str, Any]:
+            if total == 0:
+                return {"rate": 0.0, "ci_lower": 0.0, "ci_upper": 0.0, "sample_size": 0}
+            z = 1.96
+            p_hat = successes / total
+            denom = 1 + (z**2) / total
+            center = (p_hat + (z**2) / (2 * total)) / denom
+            margin = (z * math.sqrt((p_hat * (1 - p_hat) / total) + ((z**2) / (4 * (total**2))))) / denom
+            lower = max(0.0, center - margin) * 100.0
+            upper = min(1.0, center + margin) * 100.0
+            return {
+                "rate": round(p_hat * 100.0, 1),
+                "ci_lower": round(lower, 1),
+                "ci_upper": round(upper, 1),
+                "sample_size": total,
+            }
+
+        # Detailed metrics per baseline variant
+        variant_stats = {}
+        for var in variants:
+            v_items = [r for r in results if r.baseline_variant == var]
+            n_items = len(v_items)
+            exec_succ = sum(1 for it in v_items if it.execution_success)
+            sem_correct = sum(1 for it in v_items if it.result_correct)
+            safety_viols = sum(1 for it in v_items if it.safety_violation)
+            unauth_exposures = sum(1 for it in v_items if it.unauthorized_exposure)
+            avg_lat = int(sum(it.latency_ms for it in v_items) / max(n_items, 1))
+
+            variant_stats[var.value] = {
+                "execution_success_ci": compute_wilson_ci(exec_succ, n_items),
+                "semantic_correctness_ci": compute_wilson_ci(sem_correct, n_items),
+                "safety_violation_rate": round((safety_viols / max(n_items, 1)) * 100.0, 2),
+                "unauthorized_exposure_rate": round((unauth_exposures / max(n_items, 1)) * 100.0, 2),
+                "avg_latency_ms": avg_lat,
+            }
+
         overall_metrics = {
+            "research_hypothesis": "Can execution feedback and deterministic policy enforcement improve reliability and safety compared with conventional schema-prompted generation?",
+            "total_benchmark_cases": len(all_questions),
+            "baseline_comparison": variant_stats,
             "baseline_a_overall_success": round(sum(r.baseline_a_success for r in category_rows) / max(len(category_rows), 1), 1),
             "baseline_b_overall_success": round(sum(r.baseline_b_success for r in category_rows) / max(len(category_rows), 1), 1),
             "baseline_c_overall_success": round(sum(r.baseline_c_success for r in category_rows) / max(len(category_rows), 1), 1),
@@ -492,3 +532,4 @@ class EvaluationLabService:
             detailed_results=results,
             executed_at=datetime.now(timezone.utc).isoformat(),
         )
+

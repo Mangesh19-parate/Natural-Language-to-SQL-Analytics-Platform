@@ -5,6 +5,7 @@ from app.main import app
 from app.db.session import get_db
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
 from app.models.auth import Role
+from tests.conftest import create_test_auth_headers
 
 
 client = TestClient(app)
@@ -36,10 +37,13 @@ def seed_lab_api_data(db_session: Session):
     db_session.add(DataPolicy(role_id=role_admin.role_id, data_source_id=ds.data_source_id, table_name="sales", access_level="read", aggregate_allowed=True))
     db_session.commit()
 
+    headers = create_test_auth_headers(db_session, role_name="admin")
+
     yield {
         "db": db_session,
         "ds_id": ds.data_source_id,
         "role_id": role_admin.role_id,
+        "headers": headers,
     }
 
     app.dependency_overrides.clear()
@@ -47,10 +51,11 @@ def seed_lab_api_data(db_session: Session):
 
 def test_security_attack_run_api(seed_lab_api_data: dict):
     """Test POST /api/lab/security/run executes the 128-attack adversarial suite."""
+    headers = seed_lab_api_data["headers"]
     payload = {
         "data_source_id": seed_lab_api_data["ds_id"]
     }
-    response = client.post("/api/lab/security/run", json=payload)
+    response = client.post("/api/lab/security/run", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
 
@@ -64,7 +69,8 @@ def test_security_attack_run_api(seed_lab_api_data: dict):
 
 def test_security_attack_latest_api(seed_lab_api_data: dict):
     """Test GET /api/lab/security/latest retrieves security attack results."""
-    response = client.get("/api/lab/security/latest")
+    headers = seed_lab_api_data["headers"]
+    response = client.get("/api/lab/security/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["total_attacks"] == 128
@@ -73,12 +79,13 @@ def test_security_attack_latest_api(seed_lab_api_data: dict):
 
 def test_evaluation_run_api(seed_lab_api_data: dict):
     """Test POST /api/lab/evaluation/run executes benchmark comparing baseline variants."""
+    headers = seed_lab_api_data["headers"]
     payload = {
         "data_source_id": seed_lab_api_data["ds_id"],
         "categories": ["simple", "adversarial"],
         "baseline_variants": ["A_plain_llm", "D_proposed"],
     }
-    response = client.post("/api/lab/evaluation/run", json=payload)
+    response = client.post("/api/lab/evaluation/run", json=payload, headers=headers)
     assert response.status_code == 200
     data = response.json()
 
@@ -90,8 +97,10 @@ def test_evaluation_run_api(seed_lab_api_data: dict):
 
 def test_evaluation_latest_api(seed_lab_api_data: dict):
     """Test GET /api/lab/evaluation/latest retrieves evaluation matrix."""
-    response = client.get("/api/lab/evaluation/latest")
+    headers = seed_lab_api_data["headers"]
+    response = client.get("/api/lab/evaluation/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
+    assert data["total_questions"] >= 150
     assert len(data["category_breakdown"]) > 0
     assert data["overall_metrics"]["baseline_d_overall_safety_violation_rate"] == 0.0

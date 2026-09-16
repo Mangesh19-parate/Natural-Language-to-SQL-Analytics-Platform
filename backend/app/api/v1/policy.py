@@ -29,7 +29,17 @@ def list_policies(
 ):
     """
     Lists all configured data policies matching filter criteria (REQ-AUTH-02).
+    Enforces least privilege: non-admin callers can only inspect their own effective role policies.
     """
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name != "admin":
+        if role_id is not None and role_id != current_user.role_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Non-admin users are restricted to their own assigned role policies.",
+            )
+        role_id = current_user.role_id
+
     query = db.query(DataPolicy)
     if role_id is not None:
         query = query.filter(DataPolicy.role_id == role_id)
@@ -71,7 +81,15 @@ def get_policy_matrix(
     """
     Constructs an explicit permissions matrix for a role across all tables and columns
     in the semantic catalog, highlighting fail-closed default-denials (REQ-AUTH-02 / Day 79).
+    Enforces least-privilege: non-admins cannot inspect other roles' matrices.
     """
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name != "admin" and role_id != current_user.role_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Non-admin users are restricted to inspecting their own role matrix.",
+        )
+
     role = db.query(Role).filter(Role.role_id == role_id).first()
     if not role:
         raise HTTPException(

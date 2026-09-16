@@ -17,11 +17,15 @@ from app.schemas.auth import TokenData, UserOut
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security_scheme = HTTPBearer(auto_error=False)
 
+# In-memory revocation cache for rotated/revoked tokens
+_REVOKED_TOKENS = set()
+
 
 class AuthService:
     """
     Central Authentication and JWT Token Management service (REQ-AUTH-01 / Rule R0).
-    Provides robust password verification, token issuance, and server-side RBAC validation.
+    Provides robust password verification, token issuance, server-side RBAC validation,
+    and centralized resource ownership checks.
     """
 
     @staticmethod
@@ -60,7 +64,7 @@ class AuthService:
             expire = datetime.now(timezone.utc) + expires_delta
         else:
             expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        to_encode.update({"exp": expire, "type": "access"})
+        to_encode.update({"exp": expire, "type": "access", "jti": os.urandom(16).hex()})
         encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
         return encoded_jwt
 
@@ -75,7 +79,7 @@ class AuthService:
             expire = datetime.now(timezone.utc) + expires_delta
         else:
             expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        to_encode.update({"exp": expire, "type": "refresh"})
+        to_encode.update({"exp": expire, "type": "refresh", "jti": os.urandom(16).hex()})
         encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
         return encoded_jwt
 
@@ -88,9 +92,31 @@ class AuthService:
                 settings.JWT_SECRET_KEY,
                 algorithms=[settings.JWT_ALGORITHM],
             )
+            jti = payload.get("jti")
+            if jti and jti in _REVOKED_TOKENS:
+                return None
             return payload
         except JWTError:
             return None
+
+    @staticmethod
+    def revoke_token(token: str) -> bool:
+        """Revokes a JWT token by adding its jti or token hash to the revocation set."""
+        try:
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM],
+                options={"verify_exp": False}
+            )
+            jti = payload.get("jti")
+            if jti:
+                _REVOKED_TOKENS.add(jti)
+            _REVOKED_TOKENS.add(hashlib.sha256(token.encode()).hexdigest())
+            return True
+        except Exception:
+            _REVOKED_TOKENS.add(hashlib.sha256(token.encode()).hexdigest())
+            return True
 
 
 def get_current_user_optional(
@@ -186,4 +212,27 @@ def get_effective_role_id(current_user: User, requested_role_id: Optional[int] =
     if current_user.role_id is not None:
         return current_user.role_id
     return 3  # Fallback to viewer role if unassigned
+
+
+def authorize_resource_access(
+    resource_owner_id: Optional[int],
+    current_user: User,
+    resource_type: str = "resource",
+    action: str = "access",
+) -> None:
+    """
+    Centralized Resource Ownership & Least Privilege Authorization Gate (SEC-RESOURCE-OWNERSHIP).
+    Enforces that non-admin callers can only view/rerun/download their own resources.
+    Admins are permitted cross-user access for governance/auditing.
+    """
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name == "admin":
+        return
+
+    if resource_owner_id is None or current_user.user_id != resource_owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: You do not have permission to {action} this {resource_type}.",
+        )
+
 

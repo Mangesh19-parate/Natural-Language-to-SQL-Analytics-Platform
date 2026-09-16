@@ -1,6 +1,38 @@
 version: '3.8'
 
 services:
+  postgres_metadata:
+    image: postgres:15-alpine
+    container_name: sql_assistant_metadata_pg_prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${METADATA_DB_NAME:-metadata_prod}
+      POSTGRES_USER: ${METADATA_DB_USER:-trustengine_admin}
+      POSTGRES_PASSWORD: ${METADATA_DB_PASSWORD:-prod_meta_pg_pass_secure}
+    volumes:
+      - pg_metadata_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${METADATA_DB_USER:-trustengine_admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres_business:
+    image: postgres:15-alpine
+    container_name: sql_assistant_business_pg_prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${BUSINESS_DB_NAME:-enterprise_business_prod}
+      POSTGRES_USER: ${BUSINESS_DB_USER:-business_admin}
+      POSTGRES_PASSWORD: ${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}
+    volumes:
+      - pg_business_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BUSINESS_DB_USER:-business_admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -9,9 +41,14 @@ services:
     restart: always
     environment:
       - ENVIRONMENT=production
-      - METADATA_DB_URL=sqlite:///./app_metadata_prod.db
-      - BUSINESS_DB_URL=sqlite:///./enterprise_business_prod.db
-      - JWT_SECRET=prod_super_secure_jwt_secret_key_2026
+      - DEBUG=false
+      - METADATA_DB_URL=postgresql://${METADATA_DB_USER:-trustengine_admin}:${METADATA_DB_PASSWORD:-prod_meta_pg_pass_secure}@postgres_metadata:5432/${METADATA_DB_NAME:-metadata_prod}
+      - BUSINESS_ADMIN_DB_URL=postgresql://${BUSINESS_DB_USER:-business_admin}:${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
+      - BUSINESS_DB_URL=postgresql://${BUSINESS_DB_USER:-business_admin}:${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     ports:
       - "8000:8000"
     healthcheck:
@@ -19,6 +56,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      postgres_metadata:
+        condition: service_healthy
+      postgres_business:
+        condition: service_healthy
     volumes:
       - backend_data:/app/data
 
@@ -35,3 +77,6 @@ services:
 
 volumes:
   backend_data:
+  pg_metadata_data:
+  pg_business_data:
+

@@ -78,20 +78,19 @@ export default function EvaluationLab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Top Banner & Run Action */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(16,185,129,0.08) 100%)', border: '1px solid rgba(99,102,241,0.2)' }}>
+      <div className="card" style={{ background: '#0e1526', border: '1px solid #1e293b' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>📊</span>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                Evaluation Lab Harness (REQ-EVALLAB-01 &bull; Task T-32)
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+                Standing Comparative Benchmark
               </h2>
               <span style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
-                4-BASELINE COMPARISON
+                4-BASELINE EMPIRICAL EVALUATION
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Standing comparative benchmark measuring execution success, safety violations, and repair efficacy across Baselines A (Plain LLM), B (Schema-Aware), C (+Correction), and D (Trust Engine).
+              Standing empirical benchmark measuring execution accuracy, Wilson 95% confidence intervals, and safety violation rates across Baselines A (Plain LLM), B (Schema-Aware), C (+Correction), and D (Trust Engine).
             </p>
           </div>
 
@@ -105,34 +104,40 @@ export default function EvaluationLab() {
             <button
               onClick={runBenchmark}
               disabled={isRunning}
+              className="btn btn-primary"
               style={{
-                background: isRunning ? '#475569' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.65rem 1.25rem',
-                fontSize: '0.9rem',
-                fontWeight: 600,
-                cursor: isRunning ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                transition: 'all 0.2s',
               }}
             >
-              {isRunning ? (
-                <>
-                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
-                  <span>Running Benchmark...</span>
-                </>
-              ) : (
-                <>
-                  <span>⚡ Run Comparative Benchmark</span>
-                </>
-              )}
+              {isRunning ? 'Running Benchmark...' : 'Run Comparative Benchmark'}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Scope Overview Bar */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+        <div className="card" style={{ padding: '0.85rem 1rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>QUESTIONS EVALUATED</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>165</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Gold standard corpus</div>
+        </div>
+        <div className="card" style={{ padding: '0.85rem 1rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CATEGORIES</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>9</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Diverse SQL complexity</div>
+        </div>
+        <div className="card" style={{ padding: '0.85rem 1rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>BASELINES EVALUATED</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>4</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>A, B, C, D comparison</div>
+        </div>
+        <div className="card" style={{ padding: '0.85rem 1rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>STATISTICAL METHOD</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.2rem' }}>Wilson 95% CI</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Interval uncertainty estimation</div>
         </div>
       </div>
 
@@ -143,7 +148,7 @@ export default function EvaluationLab() {
           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#94a3b8' }}>
             {overallMetrics.baseline_a_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.3rem' }}>No Catalog &bull; High Hallucination</div>
+          <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.3rem' }}>No Catalog • Schema Hallucinations</div>
         </div>
 
         <div className="card" style={{ padding: '1rem', borderTop: '4px solid #38bdf8' }}>
@@ -159,7 +164,7 @@ export default function EvaluationLab() {
           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#818cf8' }}>
             {overallMetrics.baseline_c_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>E1–E7 Sandbox Retry Loop</div>
+          <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>Sandbox Repair Loop</div>
         </div>
 
         <div className="card" style={{ padding: '1rem', borderTop: '4px solid #10b981', background: 'rgba(16,185,129,0.04)' }}>
@@ -167,7 +172,7 @@ export default function EvaluationLab() {
           <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
             {overallMetrics.baseline_d_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#10b981' }}>Success</span>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>0.00% Safety Violations (Hard Gate)</div>
+          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>0 Observed Safety Violations</div>
         </div>
       </div>
 

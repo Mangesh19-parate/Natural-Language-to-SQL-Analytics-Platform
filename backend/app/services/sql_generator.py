@@ -81,7 +81,10 @@ class SQLGeneratorService:
         proposal = SQLProposal(
             sql=proposed_sql,
             rationale=rationale,
-            is_proposal=True
+            is_proposal=True,
+            generation_mode=llm_resp.generation_mode,
+            fallback_used=llm_resp.fallback_used,
+            provider_error=llm_resp.provider_error,
         )
 
         # Step 4: Deterministic Policy Validation Gate (Weeks 4-5)

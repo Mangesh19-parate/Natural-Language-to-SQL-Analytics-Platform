@@ -118,13 +118,12 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>🛡️</span>
-            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: '#f8fafc' }}>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#f8fafc' }}>
               Data Policy &amp; RBAC Governance Matrix
             </h2>
           </div>
           <p style={{ margin: '6px 0 0 0', color: '#94a3b8', fontSize: '14px' }}>
-            Enforces Rule R0 &amp; R1.2: <strong>Fail-Closed Deny-by-Default</strong>. Unconfigured tables/columns have zero access.
+            Enforces <strong>Fail-Closed Deny-by-Default</strong> security policy. Unconfigured tables and columns have zero access.
           </p>
         </div>
 

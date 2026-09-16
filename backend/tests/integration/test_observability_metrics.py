@@ -47,9 +47,10 @@ def test_prometheus_metrics_endpoint():
     assert "trustengine_http_request_duration_seconds" in text_content
 
 
-def test_observatory_metrics_json_endpoint():
+def test_observatory_metrics_json_endpoint(db_session: Session):
     """Verify that GET /api/observatory/metrics returns structured telemetry JSON."""
-    response = client.get("/api/observatory/metrics")
+    headers = create_test_auth_headers(db_session, role_name="admin")
+    response = client.get("/api/observatory/metrics", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert data["success"] is True

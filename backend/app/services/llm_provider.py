@@ -21,6 +21,9 @@ class LLMResponse(BaseModel):
     completion_tokens: int
     latency_ms: int
     model_name: str
+    generation_mode: str = "live"  # 'live' | 'deterministic_fallback' | 'mock'
+    fallback_used: bool = False
+    provider_error: Optional[str] = None
 
     model_config = {"protected_namespaces": ()}
 
@@ -236,8 +239,8 @@ class LLMProviderService:
         temperature: float = 0.0,
     ) -> LLMResponse:
         """
-        Executes generation call and returns content alongside audited hashes and metrics.
-        Never throws unhandled network exceptions; falls back safely to mock simulation.
+        Executes generation call and returns content alongside audited hashes and explicit provider status.
+        Never silently converts live failures to mock responses without explicit metadata (SEC-TRANSPARENT-LLM).
         """
         full_input = f"{system_prompt}\n---\n{user_prompt}"
         prompt_hash = self.hash_text(full_input)
@@ -246,6 +249,9 @@ class LLMProviderService:
         content = ""
         prompt_tokens = 0
         completion_tokens = 0
+        generation_mode = "mock" if self.provider == "mock" else "live"
+        fallback_used = False
+        provider_error = None
 
         # Check if live credentials exist
         if self.provider in ["openai", "groq", "openrouter", "gemini"] and self.api_key:
@@ -268,19 +274,25 @@ class LLMProviderService:
                 content = res["content"]
                 prompt_tokens = res["prompt_tokens"]
                 completion_tokens = res["completion_tokens"]
+                generation_mode = "live"
 
             except Exception as e:
                 logger.warning(
-                    f"LLM live provider '{self.provider}' failed ({e}). Falling back to deterministic mock."
+                    f"LLM live provider '{self.provider}' failed ({e}). Flagging deterministic fallback."
                 )
                 content = self._generate_mock_response(user_prompt)
                 prompt_tokens = len(full_input.split())
                 completion_tokens = len(content.split())
+                generation_mode = "deterministic_fallback"
+                fallback_used = True
+                provider_error = str(e)
         else:
             # Deterministic mock provider
             content = self._generate_mock_response(user_prompt)
             prompt_tokens = len(full_input.split())
             completion_tokens = len(content.split())
+            generation_mode = "mock"
+            fallback_used = False
 
         latency_ms = int((time.time() - start_time) * 1000)
         response_hash = self.hash_text(content)
@@ -293,6 +305,9 @@ class LLMProviderService:
             completion_tokens=completion_tokens,
             latency_ms=latency_ms,
             model_name=self.model_name,
+            generation_mode=generation_mode,
+            fallback_used=fallback_used,
+            provider_error=provider_error,
         )
 
     @classmethod

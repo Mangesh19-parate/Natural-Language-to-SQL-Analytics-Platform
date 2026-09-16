@@ -81,7 +81,7 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
 @router.post("/refresh", response_model=StandardResponse[Token])
 def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
     """
-    Refreshes an access token using a valid refresh token.
+    Refreshes an access token using a valid refresh token and rotates the refresh token (SEC-REFRESH-ROTATION).
     """
     payload = AuthService.decode_token(request.refresh_token)
     if not payload or payload.get("type") != "refresh":
@@ -89,6 +89,9 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
+
+    # Invalidate previous refresh token upon use (Rotation & Revocation)
+    AuthService.revoke_token(request.refresh_token)
 
     user_id = payload.get("sub") or payload.get("user_id")
     user = db.query(User).filter(User.user_id == int(user_id)).first()
@@ -108,16 +111,36 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
     }
 
     new_access_token = AuthService.create_access_token(data=token_claims)
+    new_refresh_token = AuthService.create_refresh_token(data=token_claims)
+
     return StandardResponse(
         success=True,
-        message="Token refreshed successfully",
+        message="Token refreshed and rotated successfully",
         data=Token(
             access_token=new_access_token,
-            refresh_token=request.refresh_token,
+            refresh_token=new_refresh_token,
             token_type="bearer",
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         ),
     )
+
+
+@router.post("/logout", response_model=StandardResponse[Dict[str, str]])
+def logout(
+    token_req: Optional[TokenRefreshRequest] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Explicitly revokes active user session and supplied refresh tokens (SEC-LOGOUT).
+    """
+    if token_req and token_req.refresh_token:
+        AuthService.revoke_token(token_req.refresh_token)
+    return StandardResponse(
+        success=True,
+        message="User logged out and session revoked successfully",
+        data={"status": "revoked"},
+    )
+
 
 
 @router.get("/me", response_model=StandardResponse[UserProfile])

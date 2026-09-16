@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,15 +31,27 @@ class Settings(BaseSettings):
     DEFAULT_MODEL_NAME: str = "gpt-4o-mini"
     DEFAULT_TEMPERATURE: float = 0.0
 
-    # Sandbox Limits
-    QUERY_TIMEOUT_SECONDS: int = 10
-    QUERY_ROW_LIMIT: int = 10000
+    # CORS Settings
+    ALLOWED_CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    def validate_production_environment(self) -> None:
+        """Enforces security boundaries at boot time: fails hard if running in production with dev secrets."""
+        if self.ENVIRONMENT.lower() == "production":
+            if not self.JWT_SECRET_KEY or "dev-insecure" in self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
+                raise RuntimeError(
+                    "CRITICAL SECURITY ERROR: Production deployment must configure a high-entropy JWT_SECRET_KEY (min 32 characters)."
+                )
 
     def get_effective_metadata_db_url(self) -> str:
         """Returns PostgreSQL URL if configured and reachable, otherwise SQLite local path."""
@@ -60,3 +72,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+settings.validate_production_environment()
+
