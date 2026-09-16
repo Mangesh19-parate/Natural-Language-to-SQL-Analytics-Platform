@@ -101,10 +101,24 @@ def test_full_evaluation_benchmark_execution(seed_eval_benchmark_data: dict):
 
 
 def test_evaluation_latest_endpoint(seed_eval_benchmark_data: dict):
-    """Test GET /api/lab/evaluation/latest retrieves cached/latest run results."""
+    """Test GET /api/lab/evaluation/latest retrieves stored results without re-running."""
     headers = seed_eval_benchmark_data["headers"]
+    # 1. Clean DB state -> 200 with 0 questions
+    res_clean = client.get("/api/lab/evaluation/latest", headers=headers)
+    assert res_clean.status_code == 200
+    data_clean = res_clean.json()
+    assert data_clean["total_questions"] == 0
+
+    # 2. Run benchmark
+    client.post(
+        "/api/lab/evaluation/run",
+        json={"data_source_id": seed_eval_benchmark_data["ds_id"], "categories": ["simple"]},
+        headers=headers,
+    )
+
+    # 3. Retrieve stored latest run
     response = client.get("/api/lab/evaluation/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["total_questions"] == 165
+    assert data["total_questions"] > 0
     assert data["overall_metrics"]["baseline_d_overall_safety_violation_rate"] == 0.0

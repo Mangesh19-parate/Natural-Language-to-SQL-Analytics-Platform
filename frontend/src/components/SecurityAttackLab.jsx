@@ -18,16 +18,14 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
     try {
       const res = await apiFetch('/api/lab/security/latest');
       const data = await res.json();
-      if (data.success && data.data) {
+      if (data.success && data.data && data.data.total_attacks > 0 && data.data.status !== 'NOT_YET_RUN') {
         setAttackData(data.data);
         setLastExecuted(data.data.executed_at);
       } else {
-        // If no prior run, automatically run one
-        runAttackSuite();
+        setAttackData(null);
       }
     } catch (err) {
       console.error('Failed to fetch latest attack run:', err);
-      runAttackSuite();
     }
   };
 
@@ -140,40 +138,54 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
         </div>
       </div>
 
-      {/* Summary Stat Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-        <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #6366f1' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>CASES TESTED</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f8fafc' }}>
-            {attackData?.total_attacks || 128} <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 400 }}>Cases</span>
+      {!attackData || attackData.total_attacks === 0 ? (
+        <div className="card" style={{ padding: '2.5rem', textAlign: 'center', background: '#0e1526', border: '1px solid #1e293b' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#f1f5f9', marginBottom: '0.5rem' }}>
+            No Security Attack Suite Runs Executed Yet
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>8 Vulnerability Classes</div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 1.5rem auto' }}>
+            Click &ldquo;Run 128-Attack Suite&rdquo; to execute the standing 128-case adversarial suite (structural modifications, UNION privilege escalations, unauthorized table/columns, Cartesian join attacks, and prompt injections).
+          </p>
+          <button onClick={runAttackSuite} disabled={isRunning} className="btn btn-primary">
+            {isRunning ? 'Executing 128 Adversarial Payloads...' : 'Run 128-Attack Suite Now'}
+          </button>
         </div>
+      ) : (
+        <>
+          {/* Summary Stat Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #6366f1' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>CASES TESTED</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f8fafc' }}>
+                {attackData?.total_attacks || 128} <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 400 }}>Cases</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>8 Vulnerability Classes</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BLOCKED</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
-            {attackData?.total_blocked || 128} / {attackData?.total_attacks || 128}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>100.0% Block Rate</div>
-        </div>
+            <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BLOCKED</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
+                {attackData?.total_blocked || 128} / {attackData?.total_attacks || 128}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>100.0% Block Rate</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>OBSERVED VIOLATIONS</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
-            {attackData?.total_violations ?? 0}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>Curated Adversarial Test Suite</div>
-        </div>
+            <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #10b981' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>OBSERVED VIOLATIONS</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>
+                {attackData?.total_violations ?? 0}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>Curated Adversarial Test Suite</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #38bdf8' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>DEFENSE IN DEPTH</div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#38bdf8' }}>
-            7 Layers
+            <div className="card" style={{ padding: '1rem', borderLeft: '4px solid #38bdf8' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>DEFENSE IN DEPTH</div>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#38bdf8' }}>
+                7 Layers
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem' }}>AST • Auth • Limits • Intent</div>
+            </div>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.3rem' }}>AST • Auth • Limits • Intent</div>
-        </div>
-      </div>
 
       {/* Stage Breakdown Chips */}
       {attackData?.stage_breakdown && (
@@ -418,6 +430,8 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

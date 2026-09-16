@@ -522,6 +522,7 @@ class ReliabilityScorerService:
             composite_score=composite_score,
             tier=tier,
             status_label=status_label,
+            is_deterministic=True,
             is_calibrated=True,
             rule_reference="Rule R3.3 (Traceable to 5 Deterministic Sub-scores, Zero Free Parameters)",
             schema_grounding=sg,

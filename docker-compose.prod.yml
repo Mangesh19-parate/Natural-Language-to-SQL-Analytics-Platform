@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${METADATA_DB_NAME:-metadata_prod}
       POSTGRES_USER: ${METADATA_DB_USER:-trustengine_admin}
-      POSTGRES_PASSWORD: ${METADATA_DB_PASSWORD:-prod_meta_pg_pass_secure}
+      POSTGRES_PASSWORD: ${METADATA_DB_PASSWORD:?Set METADATA_DB_PASSWORD in production environment}
     volumes:
       - pg_metadata_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,9 +24,10 @@ services:
     environment:
       POSTGRES_DB: ${BUSINESS_DB_NAME:-enterprise_business_prod}
       POSTGRES_USER: ${BUSINESS_DB_USER:-business_admin}
-      POSTGRES_PASSWORD: ${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}
+      POSTGRES_PASSWORD: ${BUSINESS_DB_PASSWORD:?Set BUSINESS_DB_PASSWORD in production environment}
     volumes:
       - pg_business_data:/var/lib/postgresql/data
+      - ./backend/scripts/init_postgres_roles.sql:/docker-entrypoint-initdb.d/init_postgres_roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${BUSINESS_DB_USER:-business_admin}"]
       interval: 10s
@@ -42,10 +43,10 @@ services:
     environment:
       - ENVIRONMENT=production
       - DEBUG=false
-      - METADATA_DB_URL=postgresql://${METADATA_DB_USER:-trustengine_admin}:${METADATA_DB_PASSWORD:-prod_meta_pg_pass_secure}@postgres_metadata:5432/${METADATA_DB_NAME:-metadata_prod}
-      - BUSINESS_ADMIN_DB_URL=postgresql://${BUSINESS_DB_USER:-business_admin}:${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
-      - BUSINESS_DB_URL=postgresql://${BUSINESS_DB_USER:-business_admin}:${BUSINESS_DB_PASSWORD:-prod_biz_pg_pass_secure}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - METADATA_DB_URL=postgresql://${METADATA_DB_USER:-trustengine_admin}:${METADATA_DB_PASSWORD:?Set METADATA_DB_PASSWORD}@postgres_metadata:5432/${METADATA_DB_NAME:-metadata_prod}
+      - BUSINESS_ADMIN_DB_URL=postgresql://${BUSINESS_DB_USER:-business_admin}:${BUSINESS_DB_PASSWORD:?Set BUSINESS_DB_PASSWORD}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
+      - BUSINESS_DB_URL=postgresql://${BUSINESS_READONLY_USER:-business_readonly}:${BUSINESS_READONLY_PASSWORD:-readonly_secret_pass}@postgres_business:5432/${BUSINESS_DB_NAME:-enterprise_business_prod}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in production}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}

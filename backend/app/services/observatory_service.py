@@ -52,7 +52,7 @@ class ObservatoryService:
         return record
 
     @staticmethod
-    def extract_phrases_from_questions(questions: List[str]) -> List[Tuple_Phrase := tuple]:
+    def extract_phrases_from_questions(questions: List[str]) -> List[str]:
         """Extracts significant 2-3 word phrases from questions for clustering."""
         ignore_words = {"what", "is", "the", "show", "me", "how", "many", "all", "of", "in", "for", "and", "by", "to", "a", "an"}
         phrases = []
@@ -73,6 +73,7 @@ class ObservatoryService:
     def get_top_problematic_phrases(db: Session, limit: int = 5) -> List[ProblematicPhraseItem]:
         """
         Clusters and identifies the top problematic natural-language phrases from failures and ambiguities.
+        Starts with 0 entries on empty database with zero fabricated seed phrases.
         """
         # Fetch logged phrases from failure_log
         failure_rows = db.query(FailureLog).filter(FailureLog.problematic_phrase.isnot(None)).all()
@@ -91,15 +92,10 @@ class ObservatoryService:
         extracted_phrases = ObservatoryService.extract_phrases_from_questions([q[0] for q in ambig_queries])
 
         all_phrases = explicit_phrases + extracted_phrases
-        counts = Counter(all_phrases)
+        if not all_phrases:
+            return []
 
-        # Pre-seeded default realistic analytical phrases if log is fresh
-        if not counts or len(counts) < 3:
-            counts["active customer"] += 11
-            counts["net revenue"] += 8
-            counts["sales growth"] += 6
-            counts["top performers"] += 5
-            counts["churn rate"] += 4
+        counts = Counter(all_phrases)
 
         results: List[ProblematicPhraseItem] = []
         for phrase, count in counts.most_common(limit):
@@ -107,12 +103,15 @@ class ObservatoryService:
             if "customer" in phrase or "user" in phrase:
                 intervention = "Extend Semantic Catalog definition for `customers.is_active` + add ambiguity rule for customer status."
                 cats = ["customers", "ambiguous_intent"]
-            elif "revenue" in phrase or "sales" in phrase or "growth" in phrase:
+            elif "revenue" in phrase or "sales" in phrase or "growth" in phrase or "turnover" in phrase:
                 intervention = "Define standard calculation formula for revenue (Gross vs Net) in Semantic Catalog default aggregations."
                 cats = ["sales", "orders", "metric_ambiguity"]
             elif "salary" in phrase or "employee" in phrase or "performer" in phrase:
                 intervention = "Enforce Aggregate Guard on `employees.salary` with explicit role permissions in `data_policy`."
                 cats = ["employees", "authorization"]
+            elif "drop" in phrase or "delete" in phrase or "select" in phrase:
+                intervention = "AST Policy Engine enforced blocked statement rule."
+                cats = ["security", "policy_engine"]
             else:
                 intervention = f"Add disambiguation synonym mapping for '{phrase}' in Intent Analyzer taxonomy."
                 cats = ["general_ambiguity"]
@@ -132,6 +131,7 @@ class ObservatoryService:
     def get_observatory_stats(db: Session) -> FailureObservatoryStatsResponse:
         """
         Aggregates failure metrics across all 7 taxonomy classes (REQ-FAILOBS-01).
+        Starts with 0 entries on empty database with zero fabricated seed counts.
         """
         # Count explicit failures in failure_log
         log_counts_query = (
@@ -159,28 +159,18 @@ class ObservatoryService:
             elif h.error_type == "E6":
                 class_counts["timeout"] = class_counts.get("timeout", 0) + 1
 
-        # Fallback baseline counts for rich demonstration if fresh database
-        baseline_seed = {
-            "schema_hallucination": 31,
-            "join_error": 22,
-            "ambiguous_intent": 18,
-            "semantic_mismatch": 14,
-            "type_mismatch": 11,
-            "authorization_rejection": 9,
-            "timeout": 6,
-            "syntax_error": 4,
-        }
-
-        for k, v in baseline_seed.items():
-            if k not in class_counts:
-                class_counts[k] = v
-
         total_failures = sum(class_counts.values())
+
+        # Include standard taxonomy categories
+        all_tax_classes = list(FAILURE_TAXONOMY_DESCRIPTIONS.keys())
+        for k in class_counts.keys():
+            if k not in all_tax_classes:
+                all_tax_classes.append(k)
 
         # Build list of FailureClassCount
         failure_classes_list: List[FailureClassCount] = []
-        for fc_name in sorted(class_counts.keys(), key=lambda k: class_counts[k], reverse=True):
-            count = class_counts[fc_name]
+        for fc_name in sorted(all_tax_classes, key=lambda k: class_counts.get(k, 0), reverse=True):
+            count = class_counts.get(fc_name, 0)
             pct = round((count / total_failures) * 100, 1) if total_failures > 0 else 0.0
             desc_text, sev = FAILURE_TAXONOMY_DESCRIPTIONS.get(
                 fc_name, ("Query execution or interpretation anomaly", "medium")
@@ -196,7 +186,18 @@ class ObservatoryService:
             )
 
         top_phrases = ObservatoryService.get_top_problematic_phrases(db)
-        top_rec = top_phrases[0].recommended_intervention if top_phrases else "Extend Semantic Catalog definition + add clarification rule"
+        top_rec = (
+            top_phrases[0].recommended_intervention
+            if top_phrases
+            else "Zero recorded query failures in current telemetry"
+        )
+
+        total_queries = db.query(func.count(QueryHistory.query_id)).scalar() or 0
+        failure_rate = (
+            round((total_failures / max(total_queries, total_failures)) * 100.0, 1)
+            if total_failures > 0
+            else 0.0
+        )
 
         return FailureObservatoryStatsResponse(
             total_failures=total_failures,
@@ -204,7 +205,7 @@ class ObservatoryService:
             failure_classes=failure_classes_list,
             top_problematic_phrases=top_phrases,
             top_recommended_intervention=top_rec,
-            failure_rate=4.2,  # 4.2% failure rate overall
+            failure_rate=failure_rate,
         )
 
     @staticmethod

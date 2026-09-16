@@ -39,6 +39,9 @@ class SQLProposal(BaseModel):
     generation_mode: str = "live"  # 'live' | 'deterministic_fallback' | 'mock'
     fallback_used: bool = False
     provider_error: Optional[str] = None
+    model_name: Optional[str] = None
+    provider: Optional[str] = None
+    prompt_template_version: Optional[str] = "v1.2-catalog"
 
 
 

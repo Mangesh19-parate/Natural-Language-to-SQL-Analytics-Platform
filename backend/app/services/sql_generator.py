@@ -85,6 +85,9 @@ class SQLGeneratorService:
             generation_mode=llm_resp.generation_mode,
             fallback_used=llm_resp.fallback_used,
             provider_error=llm_resp.provider_error,
+            model_name=llm_resp.model_name,
+            provider=llm_resp.provider,
+            prompt_template_version="v1.2-catalog",
         )
 
         # Step 4: Deterministic Policy Validation Gate (Weeks 4-5)

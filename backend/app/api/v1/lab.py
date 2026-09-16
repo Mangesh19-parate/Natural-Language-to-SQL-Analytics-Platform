@@ -41,13 +41,10 @@ async def get_latest_security_attack_run(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieves the latest standing Security Attack Lab run.
+    Retrieves the latest standing Security Attack Lab run from database without re-executing.
     Requires authenticated user access.
     """
-    response = SecurityAttackLabService.execute_attack_suite(
-        db=db,
-        data_source_id=1,
-    )
+    response = SecurityAttackLabService.get_latest_attack_run(db=db)
     return response
 
 
@@ -58,7 +55,7 @@ async def run_evaluation_benchmark(
     db: Session = Depends(get_db),
 ):
     """
-    Executes the Evaluation Lab benchmark comparing Baselines A, B, C, and D across 9 categories (REQ-EVALLAB-01).
+    Executes the Evaluation Lab benchmark comparing Baselines A, B, C, and D across categories (REQ-EVALLAB-01).
     Strictly restricted to Admin role to prevent expensive computational abuse.
     """
     response = await EvaluationLabService.run_benchmark_suite(
@@ -76,12 +73,9 @@ async def get_latest_evaluation_benchmark(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieves the benchmark comparison matrix across all 4 baseline variants.
+    Retrieves the latest benchmark comparison matrix from database without re-executing.
     Requires authenticated user access.
     """
-    response = await EvaluationLabService.run_benchmark_suite(
-        db=db,
-        data_source_id=1,
-    )
+    response = EvaluationLabService.get_latest_evaluation_run(db=db)
     return response
 

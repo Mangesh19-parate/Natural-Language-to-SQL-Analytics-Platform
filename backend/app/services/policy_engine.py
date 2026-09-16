@@ -16,12 +16,12 @@ class PolicyLookupService:
     """
     Fail-Closed Policy Engine Lookup Service (REQ-AUTH-02 / Rule R1.2).
     
-    Guarantees:
-    - DENY BY DEFAULT: If no explicit data_policy row exists for (role_id, data_source_id, table_name),
-      access to that table is 0 (completely inaccessible).
-    - COLUMN-LEVEL GRANULARITY: Specific column grants/denials override table-level defaults.
-    - AGGREGATE FUNCTION GUARD: Sensitive columns cannot be aggregated unless aggregate_allowed=True.
-    - ROW FILTER INJECTION: Enforces data_policy.row_filter_sql if present.
+    Formal Precedence Hierarchy (Highest to Lowest):
+    1. Explicit Column Deny (DataPolicy row with table, column, access_level='denied') -> REJECT
+    2. Table-level Deny (DataPolicy row with table, column=None, access_level='denied') -> REJECT
+    3. Explicit Column Allow (DataPolicy row with table, column, access_level='read'/'read_aggregate_only') -> ALLOW
+    4. Table-level Allow (DataPolicy row with table, column=None, access_level='read'/'read_aggregate_only') -> ALLOW (unless column explicitly denied)
+    5. System Deny-by-Default (No matching DataPolicy row exists) -> REJECT (Fail-Closed)
     """
 
     @staticmethod

@@ -16,15 +16,14 @@ export default function EvaluationLab() {
     try {
       const res = await apiFetch('/api/lab/evaluation/latest');
       const data = await res.json();
-      if (data.success && data.data) {
+      if (data.success && data.data && data.data.total_questions > 0) {
         setEvalData(data.data);
         setLastExecuted(data.data.executed_at);
       } else {
-        runBenchmark();
+        setEvalData(null);
       }
     } catch (err) {
       console.error('Failed to fetch latest evaluation run:', err);
-      runBenchmark();
     }
   };
 
@@ -126,7 +125,7 @@ export default function EvaluationLab() {
         </div>
         <div className="card" style={{ padding: '0.85rem 1rem' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CATEGORIES</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>9</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>10</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Diverse SQL complexity</div>
         </div>
         <div className="card" style={{ padding: '0.85rem 1rem' }}>
@@ -141,53 +140,67 @@ export default function EvaluationLab() {
         </div>
       </div>
 
-      {/* 4-Baseline Overall Comparison Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-        <div className="card" style={{ padding: '1rem', borderTop: '4px solid #64748b' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE A: PLAIN LLM</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#94a3b8' }}>
-            {overallMetrics.baseline_a_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
+      {!evalData || evalData.total_questions === 0 ? (
+        <div className="card" style={{ padding: '2.5rem', textAlign: 'center', background: '#0e1526', border: '1px solid #1e293b' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#f1f5f9', marginBottom: '0.5rem' }}>
+            No Benchmark Runs Executed Yet
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.3rem' }}>No Catalog • Schema Hallucinations</div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 1.5rem auto' }}>
+            Click &ldquo;Run Comparative Benchmark&rdquo; to execute the standing 165-question corpus across all 4 baseline variants (Plain LLM, Schema-Aware, Self-Correction, and Verification-First Trust Engine).
+          </p>
+          <button onClick={runBenchmark} disabled={isRunning} className="btn btn-primary">
+            {isRunning ? 'Executing Evaluation Suite...' : 'Run Comparative Benchmark Now'}
+          </button>
         </div>
+      ) : (
+        <>
+          {/* 4-Baseline Overall Comparison Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            <div className="card" style={{ padding: '1rem', borderTop: '4px solid #64748b' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE A: PLAIN LLM</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#94a3b8' }}>
+                {overallMetrics.baseline_a_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '0.3rem' }}>No Catalog • Schema Hallucinations</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderTop: '4px solid #38bdf8' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE B: SCHEMA-AWARE</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#38bdf8' }}>
-            {overallMetrics.baseline_b_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: '0.3rem' }}>Catalog Grounded Prompt</div>
-        </div>
+            <div className="card" style={{ padding: '1rem', borderTop: '4px solid #38bdf8' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE B: SCHEMA-AWARE</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#38bdf8' }}>
+                {overallMetrics.baseline_b_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#38bdf8', marginTop: '0.3rem' }}>Catalog Grounded Prompt</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderTop: '4px solid #818cf8' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE C: +SELF-CORRECTION</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#818cf8' }}>
-            {overallMetrics.baseline_c_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>Sandbox Repair Loop</div>
-        </div>
+            <div className="card" style={{ padding: '1rem', borderTop: '4px solid #818cf8' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE C: +SELF-CORRECTION</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#818cf8' }}>
+                {overallMetrics.baseline_c_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Success</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.3rem' }}>Sandbox Repair Loop</div>
+            </div>
 
-        <div className="card" style={{ padding: '1rem', borderTop: '4px solid #10b981', background: 'rgba(16,185,129,0.04)' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE D: TRUST ENGINE</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
-            {overallMetrics.baseline_d_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#10b981' }}>Success</span>
+            <div className="card" style={{ padding: '1rem', borderTop: '4px solid #10b981', background: 'rgba(16,185,129,0.04)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>BASELINE D: TRUST ENGINE</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
+                {overallMetrics.baseline_d_overall_success || 0}% <span style={{ fontSize: '0.8rem', color: '#10b981' }}>Success</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>0 Observed Safety Violations</div>
+            </div>
           </div>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.3rem' }}>0 Observed Safety Violations</div>
-        </div>
-      </div>
 
-      {/* Category Performance Matrix */}
-      <div className="card" style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 0.2rem 0' }}>
-              Category Performance Matrix (9 Benchmark Domains)
-            </h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Comparison across standard business queries, complex nested joins, adversarial injections, and unauthorized attempts.
-            </span>
-          </div>
-        </div>
+          {/* Category Performance Matrix */}
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 0.2rem 0' }}>
+                  Category Performance Matrix (10 Benchmark Domains)
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Comparison across standard business queries, complex nested joins, adversarial injections, and unauthorized attempts.
+                </span>
+              </div>
+            </div>
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
@@ -371,6 +384,8 @@ export default function EvaluationLab() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

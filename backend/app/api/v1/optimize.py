@@ -16,6 +16,7 @@ from app.schemas.optimize import (
 )
 from app.services.auth_service import get_current_user, require_roles, authorize_resource_access
 from app.services.policy_engine import PolicyEngine
+from app.services.sql_parser import SQLASTParser
 from app.services.optimizer import QueryOptimizerService
 
 router = APIRouter(prefix="", tags=["Optimization"])
@@ -111,12 +112,48 @@ def optimize_analyze(
 ):
     """
     Opt-in EXPLAIN ANALYZE execution. Strictly gated to admin role on the server side (REQ-OPT-02 / Rule R0).
-    Runs inside read-only execution sandbox with query timeout and row limit enforcement.
+    Runs inside read-only execution sandbox with query timeout, row limit, and AST policy validation.
     """
+    # 1. Full Deterministic Policy Engine AST Validation Gate
+    analysis = SQLASTParser.analyze_sql(request.sql)
+    if not analysis.is_valid_syntax:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SQL Syntax Error: {analysis.syntax_error}",
+        )
+    if not analysis.is_select_only:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=analysis.syntax_error or "Only SELECT queries are permitted in EXPLAIN ANALYZE (Rule R1.1).",
+        )
+    if analysis.disallowed_functions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Disallowed functions blocked: {', '.join(analysis.disallowed_functions)}",
+        )
+
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    injected_sql = None
+    if user_role_name != "admin":
+        policy_res = PolicyEngine.validate_sql(
+            db=db,
+            sql=request.sql,
+            role_id=current_user.role_id or 1,
+            data_source_id=1,
+        )
+        if not policy_res.is_allowed:
+            violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Policy violation in EXPLAIN ANALYZE candidate SQL: {violation_msg}",
+            )
+        injected_sql = policy_res.injected_sql
+
     try:
+        exec_sql = injected_sql or request.sql
         plan_raw, plan_summary, exec_stats = QueryOptimizerService.run_explain_analyze(
             business_engine,
-            request.sql,
+            exec_sql,
             role="admin",
             timeout_seconds=10.0,
         )

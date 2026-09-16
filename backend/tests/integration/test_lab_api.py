@@ -68,8 +68,19 @@ def test_security_attack_run_api(seed_lab_api_data: dict):
 
 
 def test_security_attack_latest_api(seed_lab_api_data: dict):
-    """Test GET /api/lab/security/latest retrieves security attack results."""
+    """Test GET /api/lab/security/latest retrieves stored results without re-execution."""
     headers = seed_lab_api_data["headers"]
+    # 1. Clean state before run
+    res_clean = client.get("/api/lab/security/latest", headers=headers)
+    assert res_clean.status_code == 200
+    data_clean = res_clean.json()
+    assert data_clean["status"] == "NOT_YET_RUN"
+    assert data_clean["total_attacks"] == 0
+
+    # 2. Execute run
+    client.post("/api/lab/security/run", json={"data_source_id": seed_lab_api_data["ds_id"]}, headers=headers)
+
+    # 3. Retrieve latest stored run
     response = client.get("/api/lab/security/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
@@ -96,11 +107,27 @@ def test_evaluation_run_api(seed_lab_api_data: dict):
 
 
 def test_evaluation_latest_api(seed_lab_api_data: dict):
-    """Test GET /api/lab/evaluation/latest retrieves evaluation matrix."""
+    """Test GET /api/lab/evaluation/latest retrieves stored evaluation matrix without re-execution."""
     headers = seed_lab_api_data["headers"]
+    # 1. Clean state before run
+    res_clean = client.get("/api/lab/evaluation/latest", headers=headers)
+    assert res_clean.status_code == 200
+    data_clean = res_clean.json()
+    assert data_clean["total_questions"] == 0
+    assert data_clean["overall_metrics"]["status"] == "No benchmark runs executed yet"
+
+    # 2. Execute a benchmark run
+    payload = {
+        "data_source_id": seed_lab_api_data["ds_id"],
+        "categories": ["simple", "adversarial"],
+        "baseline_variants": ["A_plain_llm", "D_proposed"],
+    }
+    client.post("/api/lab/evaluation/run", json=payload, headers=headers)
+
+    # 3. Retrieve stored latest run
     response = client.get("/api/lab/evaluation/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["total_questions"] >= 150
+    assert data["total_questions"] > 0
     assert len(data["category_breakdown"]) > 0
     assert data["overall_metrics"]["baseline_d_overall_safety_violation_rate"] == 0.0

@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from app.models.lab import SecurityAttackLog
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
@@ -458,4 +459,84 @@ class SecurityAttackLabService:
             results=results,
             stage_breakdown=stage_counts,
             executed_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    @classmethod
+    def get_latest_attack_run(cls, db: Session) -> SecurityAttackRunResponse:
+        """
+        Retrieves the latest stored Security Attack Lab run from the database without re-executing.
+        Returns a clean empty state if no attacks have been executed yet.
+        """
+        latest_log = (
+            db.query(SecurityAttackLog)
+            .order_by(desc(SecurityAttackLog.attack_id))
+            .first()
+        )
+        if not latest_log:
+            return SecurityAttackRunResponse(
+                run_id="none",
+                total_attacks=0,
+                total_blocked=0,
+                total_unblocked=0,
+                safety_violation_rate=0.0,
+                status="NOT_YET_RUN",
+                results=[],
+                stage_breakdown={},
+                executed_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+        run_logs = (
+            db.query(SecurityAttackLog)
+            .filter(SecurityAttackLog.run_id == latest_log.run_id)
+            .all()
+        )
+        results: List[SecurityAttackResultItem] = []
+        stage_counts: Dict[str, int] = {}
+        total_blocked = 0
+        total_unblocked = 0
+
+        for idx, l in enumerate(run_logs):
+            if l.blocked:
+                total_blocked += 1
+            else:
+                total_unblocked += 1
+
+            stage_counts[l.blocked_at_stage] = stage_counts.get(l.blocked_at_stage, 0) + (1 if l.blocked else 0)
+
+            try:
+                atk_class = AttackClassType(l.attack_class)
+            except Exception:
+                atk_class = AttackClassType.STRUCTURAL
+
+            try:
+                blk_stage = BlockedStageType(l.blocked_at_stage)
+            except Exception:
+                blk_stage = BlockedStageType.POLICY_ENGINE
+
+            results.append(
+                SecurityAttackResultItem(
+                    attack_id=idx + 1,
+                    attack_name=l.attack_name,
+                    attack_class=atk_class,
+                    input_payload=l.input_payload or "",
+                    blocked=l.blocked,
+                    blocked_at_stage=blk_stage,
+                    violation_message="Blocked by security policy" if l.blocked else "Unblocked",
+                )
+            )
+
+        total_count = len(run_logs)
+        violation_rate = round((total_unblocked / max(total_count, 1)) * 100.0, 2)
+        status = "PASSED" if total_unblocked == 0 else "FAILED_SAFETY_GATE"
+
+        return SecurityAttackRunResponse(
+            run_id=latest_log.run_id,
+            total_attacks=total_count,
+            total_blocked=total_blocked,
+            total_unblocked=total_unblocked,
+            safety_violation_rate=violation_rate,
+            status=status,
+            results=results,
+            stage_breakdown=stage_counts,
+            executed_at=(latest_log.created_at.isoformat() if latest_log.created_at else datetime.now(timezone.utc).isoformat()),
         )

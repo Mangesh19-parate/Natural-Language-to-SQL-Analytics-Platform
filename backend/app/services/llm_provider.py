@@ -21,6 +21,7 @@ class LLMResponse(BaseModel):
     completion_tokens: int
     latency_ms: int
     model_name: str
+    provider: str = "mock"
     generation_mode: str = "live"  # 'live' | 'deterministic_fallback' | 'mock'
     fallback_used: bool = False
     provider_error: Optional[str] = None
@@ -305,6 +306,7 @@ class LLMProviderService:
             completion_tokens=completion_tokens,
             latency_ms=latency_ms,
             model_name=self.model_name,
+            provider=self.provider,
             generation_mode=generation_mode,
             fallback_used=fallback_used,
             provider_error=provider_error,

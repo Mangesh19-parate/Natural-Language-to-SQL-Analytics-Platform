@@ -216,7 +216,7 @@ export default function FailureObservatory({ activeRole = 'admin' }) {
           </div>
           <div className="mt-3">
             <span className="text-lg font-bold text-purple-300 block truncate">
-              {stats?.failure_classes?.[0] ? (FAILURE_CLASS_META[stats.failure_classes[0].failure_class]?.label || stats.failure_classes[0].failure_class) : 'None'}
+              {stats?.failure_classes?.[0] && stats.total_failures > 0 ? (FAILURE_CLASS_META[stats.failure_classes[0].failure_class]?.label || stats.failure_classes[0].failure_class) : 'None'}
             </span>
             <span className="text-xs text-slate-400">most frequent pattern</span>
           </div>
@@ -235,6 +235,21 @@ export default function FailureObservatory({ activeRole = 'admin' }) {
           </div>
         </div>
       </div>
+
+      {stats?.total_failures === 0 && (
+        <div className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-800/40 text-emerald-300 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+            <div>
+              <h4 className="text-sm font-semibold text-emerald-200">Zero Recorded Query Failures in Current Telemetry</h4>
+              <p className="text-xs text-emerald-400/80 mt-0.5">The telemetry logs contain 0 recorded query failures or policy violations. All deterministic execution gates are healthy.</p>
+            </div>
+          </div>
+          <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-emerald-900/40 border border-emerald-700/50 text-emerald-300">
+            100% HEALTHY
+          </span>
+        </div>
+      )}
 
       {/* Main Grid: Taxonomy Breakdown + Problematic Phrases + Interventions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

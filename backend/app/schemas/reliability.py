@@ -24,6 +24,7 @@ class ReliabilityBreakdown(BaseModel):
     composite_score: int = Field(ge=0, le=100, description="Weighted composite score")
     tier: SubScoreTier
     status_label: str  # e.g., "✓ HIGH (92/100)"
+    is_deterministic: bool = True
     is_calibrated: bool = True
     rule_reference: str = "Rule R3.3 (Traceable to 5 Deterministic Sub-scores, Zero Free Parameters)"
     
