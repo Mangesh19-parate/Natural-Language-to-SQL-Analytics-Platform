@@ -1,0 +1,70 @@
+name: Continuous Integration & Hard-Gate Verification
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  backend-test-and-security-gate:
+    name: Backend Tests & Security Attack Lab Gate (REQ-SECLAB-01)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Seed Database Test Fixtures
+        run: |
+          python scripts/seed_business_db.py
+          python scripts/seed_metadata_db.py
+
+      - name: Run Full Backend Pytest Suite
+        run: |
+          pytest tests -v
+
+      - name: Verify Security Attack Lab Hard Gate (0.00% Safety Violation Rate)
+        run: |
+          pytest tests/integration/test_lab_api.py::test_security_attack_run_api -v
+
+  frontend-build:
+    name: Frontend Build & Asset Compilation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Install Frontend Dependencies
+        run: |
+          npm ci
+
+      - name: Verify Production Build
+        run: |
+          npm run build

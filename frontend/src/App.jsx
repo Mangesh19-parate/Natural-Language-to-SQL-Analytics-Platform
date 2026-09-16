@@ -9,16 +9,18 @@ import QueryHistoryView from './components/QueryHistoryView.jsx';
 import QueryReplayCard from './components/QueryReplayCard.jsx';
 import FailureObservatory from './components/FailureObservatory.jsx';
 import RefusalStateCard from './components/RefusalStateCard.jsx';
+import VoiceInputButton from './components/VoiceInputButton.jsx';
+import PlannerAgentCard from './components/PlannerAgentCard.jsx';
 import AuthModal from './components/AuthModal.jsx';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'history' | 'policy' | 'replay' | 'security' | 'evaluation' | 'observatory'
+  const [activeTab, setActiveTab] = useState('studio'); // 'studio' | 'planner' | 'history' | 'policy' | 'replay' | 'security' | 'evaluation' | 'observatory'
   const [health, setHealth] = useState({
     status: 'checking...',
     environment: 'local',
     metadata_db_connected: false,
     business_db_connected: false,
-    version: '1.3.0',
+    version: '1.4.0',
   });
   const [catalog, setCatalog] = useState(null);
   const [selectedRole, setSelectedRole] = useState(1); // 1: admin, 2: analyst, 3: viewer
@@ -213,10 +215,10 @@ export default function App() {
 
           <div style={{ textAlign: 'right' }}>
             <span className="badge badge-p0" style={{ marginBottom: '0.4rem' }}>
-              Milestone M4 &bull; Production Readiness &amp; Observatory
+              Milestone M5 &bull; Production Ready (Platform + P2 Complete)
             </span>
             <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
-              Week 13 Gate (T-40 Observatory &bull; T-41 WCAG &bull; T-42 0.00% Safety)
+              Week 14 Gate (Voice T-43 &bull; Planner Agent T-44 &bull; CI/CD T-45 &bull; Load Test T-46)
             </div>
           </div>
         </div>
@@ -249,6 +251,29 @@ export default function App() {
         >
           <span>⚡</span>
           <span>Interactive Studio</span>
+        </button>
+
+        <button
+          role="tab"
+          aria-selected={activeTab === 'planner'}
+          onClick={() => setActiveTab('planner')}
+          style={{
+            background: activeTab === 'planner' ? 'rgba(129, 140, 248, 0.15)' : 'transparent',
+            color: activeTab === 'planner' ? '#818cf8' : 'var(--text-muted)',
+            border: activeTab === 'planner' ? '1px solid rgba(129, 140, 248, 0.4)' : '1px solid transparent',
+            borderRadius: '8px',
+            padding: '0.5rem 1.1rem',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            transition: 'all 0.15s'
+          }}
+        >
+          <span>🤖</span>
+          <span>Planner Agent (T-44)</span>
         </button>
 
         <button
@@ -397,6 +422,15 @@ export default function App() {
         <FailureObservatory activeRole={selectedRoleName} />
       )}
 
+      {/* Tab 0.5: Multi-Step Planner Agent */}
+      {activeTab === 'planner' && (
+        <PlannerAgentCard
+          activeRole={selectedRoleName}
+          activeRoleId={selectedRole}
+          dataSourceId={1}
+        />
+      )}
+
       {/* Tab 1: Query History View */}
       {activeTab === 'history' && (
         <QueryHistoryView
@@ -509,7 +543,7 @@ export default function App() {
                 e.preventDefault();
                 handleClassify();
               }}
-              style={{ display: 'flex', gap: '0.75rem' }}
+              style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}
             >
               <input
                 type="text"
@@ -527,6 +561,12 @@ export default function App() {
                   fontSize: '0.95rem'
                 }}
               />
+              <VoiceInputButton
+                onTranscript={(transcript) => {
+                  setQueryInput(transcript);
+                }}
+                disabled={isClassifying}
+              />
               <button
                 type="submit"
                 disabled={isClassifying || !queryInput.trim()}
@@ -535,7 +575,7 @@ export default function App() {
                   color: '#fff',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '0 1.5rem',
+                  padding: '0.75rem 1.5rem',
                   fontWeight: 600,
                   fontSize: '0.95rem',
                   cursor: isClassifying || !queryInput.trim() ? 'not-allowed' : 'pointer',
