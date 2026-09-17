@@ -1,3 +1,4 @@
+from collections import deque
 from typing import List, Dict, Tuple, Optional
 from app.schemas.agent import PlanSubTask
 
@@ -45,12 +46,12 @@ class DAGValidator:
                 adj_list[dep_id].append(task.step_id)
                 in_degree[task.step_id] += 1
 
-        # Kahn's algorithm for topological sorting and cycle detection
-        queue = [step_id for step_id, deg in in_degree.items() if deg == 0]
+        # Kahn's algorithm for topological sorting and cycle detection (True O(V + E))
+        queue: deque[int] = deque([step_id for step_id, deg in in_degree.items() if deg == 0])
         topological_order: List[PlanSubTask] = []
 
         while queue:
-            curr = queue.pop(0)
+            curr = queue.popleft()
             topological_order.append(task_map[curr])
 
             for neighbor in adj_list[curr]:

@@ -80,3 +80,33 @@ def test_optimize_analyze_endpoint_role_gating(db_session: Session):
     assert "execution_stats" in data
     assert len(data["suggestions"]) > 0
 
+
+def test_optimize_join_plan_endpoint(db_session: Session):
+    """
+    Test POST /api/optimize/join-plan computes Bitmask DP join order and cost metrics.
+    """
+    client = TestClient(app)
+    headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
+
+    # Seed policies for tables
+    admin_role = db_session.query(Role).filter(Role.role_name == "admin").first()
+    for tbl in ["customers", "orders", "sales"]:
+        db_session.add(DataPolicy(role_id=admin_role.role_id, data_source_id=1, table_name=tbl, access_level="read", aggregate_allowed=True))
+    db_session.commit()
+
+    payload = {
+        "sql": "SELECT c.customer_name, o.total_amount, s.revenue FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN sales s ON o.order_id = s.order_id;",
+        "data_source_id": 1,
+        "max_allowed_cost": 50000.0,
+    }
+
+    res = client.post("/api/optimize/join-plan", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["search_strategy"] == "BITMASK_DYNAMIC_PROGRAMMING"
+    assert data["subsets_evaluated"] >= 4
+    assert data["gate_decision"] == "ALLOW"
+    assert "plan_tree" in data
+    assert data["optimal_cost"] > 0
+
+

@@ -13,11 +13,14 @@ from app.schemas.optimize import (
     OptimizeAnalyzeRequest,
     OptimizeResponse,
     OptimizationItem,
+    JoinPlanRequest,
+    JoinPlanResponse,
 )
 from app.services.auth_service import get_current_user, require_roles, authorize_resource_access
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
 from app.services.optimizer import QueryOptimizerService
+from app.services.join_optimizer import CostBasedJoinOptimizer
 
 router = APIRouter(prefix="", tags=["Optimization"])
 
@@ -239,4 +242,41 @@ def get_query_optimizations(
             for r in records
         ],
     }
+
+
+@router.post(
+    "/join-plan",
+    response_model=JoinPlanResponse,
+    summary="Compute Optimal Cost-Based Physical Join Plan (Bitmask DP & Greedy Heuristic)",
+)
+def optimize_join_plan(
+    request: JoinPlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Computes optimal join order, algorithm selection (Hash vs Nested Loop vs Sort Merge),
+    and pre-execution cost gating via Bitmask Dynamic Programming in O(3^N).
+    """
+    # 1. Deterministic AST Policy Gate check
+    policy_res = PolicyEngine.validate_sql(
+        db=db,
+        sql=request.sql,
+        role_id=current_user.role_id or 3,
+        data_source_id=request.data_source_id,
+    )
+    if not policy_res.is_allowed:
+        violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Policy violation in optimization candidate SQL: {violation_msg}",
+        )
+
+    exec_sql = policy_res.injected_sql or request.sql
+    plan_response = CostBasedJoinOptimizer.optimize_query(
+        sql=exec_sql,
+        max_allowed_cost=request.max_allowed_cost,
+    )
+    return plan_response
+
 
