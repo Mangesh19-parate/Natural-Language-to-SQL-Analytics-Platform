@@ -73,8 +73,48 @@ class SQLGeneratorService:
 
         # Step 3: LLM Generation
         llm_resp = await self.llm_provider.generate(system_prompt, user_prompt)
-        parsed = self._extract_json(llm_resp.content)
+        
+        if llm_resp.generation_mode == "error" or not llm_resp.content:
+            proposal = SQLProposal(
+                sql="",
+                rationale="LLM proposal generation unavailable due to upstream provider error or missing configuration.",
+                is_proposal=False,
+                generation_mode="error",
+                fallback_used=False,
+                provider_error=llm_resp.provider_error or "Empty completion from LLM provider",
+                model_name=llm_resp.model_name,
+                provider=llm_resp.provider,
+                prompt_template_version="v1.2-catalog",
+            )
+            policy_result = PolicyEngine.validate_sql(
+                db=db,
+                role_id=role_id,
+                data_source_id=data_source_id,
+                sql="-- Provider Error",
+            )
+            reliability = ReliabilityScorerService.compute_reliability_score(
+                db=db,
+                sql="",
+                role_id=role_id,
+                data_source_id=data_source_id,
+                policy_validation=policy_result,
+                critic_analysis=None,
+                clarifications=clarifications,
+                execution_success=False,
+                row_count=0,
+                latency_ms=0,
+            )
+            return SQLGenerateResponse(
+                question=question,
+                proposal=proposal,
+                policy_validation=policy_result,
+                critic_analysis=None,
+                reliability_breakdown=reliability,
+                can_execute=False,
+                rejection_reasons=[f"LLM Provider Error: {llm_resp.provider_error or 'Proposal unavailable'}"],
+            )
 
+        parsed = self._extract_json(llm_resp.content)
         proposed_sql = parsed.get("sql", "").strip()
         rationale = parsed.get("rationale", "")
 

@@ -46,11 +46,15 @@ class Settings(BaseSettings):
     )
 
     def validate_production_environment(self) -> None:
-        """Enforces security boundaries at boot time: fails hard if running in production with dev secrets."""
+        """Enforces security boundaries at boot time: fails hard if running in production with dev secrets or shared admin DB credentials."""
         if self.ENVIRONMENT.lower() == "production":
             if not self.JWT_SECRET_KEY or "dev-insecure" in self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
                 raise RuntimeError(
                     "CRITICAL SECURITY ERROR: Production deployment must configure a high-entropy JWT_SECRET_KEY (min 32 characters)."
+                )
+            if self.BUSINESS_DB_URL and self.BUSINESS_ADMIN_DB_URL and self.BUSINESS_DB_URL == self.BUSINESS_ADMIN_DB_URL:
+                raise RuntimeError(
+                    "CRITICAL SECURITY ERROR: Production deployment requires distinct database credentials for BUSINESS_ADMIN_DB_URL and BUSINESS_DB_URL (read-only)."
                 )
 
     def get_effective_metadata_db_url(self) -> str:

@@ -38,27 +38,26 @@ def optimize_explain(
     Identifies unindexed filters, expensive joins, and unindexed sort operations.
     Returns structured evidence and confidence ratings (Low / Medium / High).
     """
-    # 1. Deterministic Policy Gate check before EXPLAIN
-    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
-    if user_role_name != "admin":
-        policy_res = PolicyEngine.validate_sql(
-            db=db,
-            sql=request.sql,
-            role_id=current_user.role_id or 3,
-            data_source_id=1,
+    # 1. Deterministic Policy Gate check before EXPLAIN (Universal Guardrail Invariance)
+    policy_res = PolicyEngine.validate_sql(
+        db=db,
+        sql=request.sql,
+        role_id=current_user.role_id or 3,
+        data_source_id=1,
+    )
+    if not policy_res.is_allowed:
+        violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Policy violation in optimization candidate SQL: {violation_msg}",
         )
-        if not policy_res.is_allowed:
-            violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Policy violation in optimization candidate SQL: {violation_msg}",
-            )
 
     try:
-        plan_raw, plan_summary = QueryOptimizerService.run_explain(business_engine, request.sql)
+        exec_sql = policy_res.injected_sql or request.sql
+        plan_raw, plan_summary = QueryOptimizerService.run_explain(business_engine, exec_sql)
         suggestions = QueryOptimizerService.generate_suggestions(
             business_engine,
-            request.sql,
+            exec_sql,
             plan_raw,
             plan_summary,
             is_analyze=False,
@@ -114,7 +113,7 @@ def optimize_analyze(
     Opt-in EXPLAIN ANALYZE execution. Strictly gated to admin role on the server side (REQ-OPT-02 / Rule R0).
     Runs inside read-only execution sandbox with query timeout, row limit, and AST policy validation.
     """
-    # 1. Full Deterministic Policy Engine AST Validation Gate
+    # 1. Full Deterministic Policy Engine AST Validation Gate (No bypass for admin)
     analysis = SQLASTParser.analyze_sql(request.sql)
     if not analysis.is_valid_syntax:
         raise HTTPException(
@@ -132,22 +131,19 @@ def optimize_analyze(
             detail=f"Disallowed functions blocked: {', '.join(analysis.disallowed_functions)}",
         )
 
-    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
-    injected_sql = None
-    if user_role_name != "admin":
-        policy_res = PolicyEngine.validate_sql(
-            db=db,
-            sql=request.sql,
-            role_id=current_user.role_id or 1,
-            data_source_id=1,
+    policy_res = PolicyEngine.validate_sql(
+        db=db,
+        sql=request.sql,
+        role_id=current_user.role_id or 1,
+        data_source_id=1,
+    )
+    if not policy_res.is_allowed:
+        violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Policy violation in EXPLAIN ANALYZE candidate SQL: {violation_msg}",
         )
-        if not policy_res.is_allowed:
-            violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Policy violation in EXPLAIN ANALYZE candidate SQL: {violation_msg}",
-            )
-        injected_sql = policy_res.injected_sql
+    injected_sql = policy_res.injected_sql
 
     try:
         exec_sql = injected_sql or request.sql

@@ -2,6 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
+from app.models.policy import DataSource, DataPolicy
+from app.models.auth import Role
 from tests.conftest import create_test_auth_headers
 
 
@@ -11,6 +13,15 @@ def test_optimize_explain_endpoint(db_session: Session):
     """
     client = TestClient(app)
     headers = create_test_auth_headers(db_session, role_name="admin", user_id=1)
+    
+    # Seed policy for admin
+    ds = db_session.query(DataSource).filter(DataSource.data_source_id == 1).first()
+    if not ds:
+        ds = DataSource(data_source_id=1, name="Default DB", db_type="sqlite", secret_ref="local", is_active=True)
+        db_session.add(ds)
+    db_session.add(DataPolicy(role_id=1, data_source_id=1, table_name="employees", access_level="read", aggregate_allowed=True))
+    db_session.commit()
+
     payload = {
         "sql": "SELECT first_name, last_name, salary FROM employees WHERE salary > 75000;",
         "role_name": "admin",
@@ -40,6 +51,15 @@ def test_optimize_analyze_endpoint_role_gating(db_session: Session):
 
     analyst_headers = create_test_auth_headers(db_session, role_name="analyst", user_id=11, email="analyst11@corp.com")
     admin_headers = create_test_auth_headers(db_session, role_name="admin", user_id=10, email="admin10@corp.com")
+
+    # Seed policy for admin user
+    admin_role = db_session.query(Role).filter(Role.role_name == "admin").first()
+    ds = db_session.query(DataSource).filter(DataSource.data_source_id == 1).first()
+    if not ds:
+        ds = DataSource(data_source_id=1, name="Default DB", db_type="sqlite", secret_ref="local", is_active=True)
+        db_session.add(ds)
+    db_session.add(DataPolicy(role_id=admin_role.role_id, data_source_id=1, table_name="products", access_level="read", aggregate_allowed=True))
+    db_session.commit()
 
     # 1. Non-admin request -> 403 Forbidden
     non_admin_payload = {

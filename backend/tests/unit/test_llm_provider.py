@@ -28,13 +28,16 @@ async def test_llm_provider_hashed_auditing():
 
 
 @pytest.mark.asyncio
-async def test_llm_provider_multi_provider_fallbacks():
-    """Verifies that live providers with invalid or missing keys fall back to mock safely."""
+async def test_llm_provider_live_error_handling():
+    """Verifies that live providers with invalid or unreachable keys return explicit error mode without fake SQL."""
     for prov in ["openai", "groq", "gemini", "openrouter"]:
         service = LLMProviderService(provider=prov, api_key="invalid_test_key", timeout_seconds=1.0)
         assert service.provider == prov
         resp = await service.generate(system_prompt="system", user_prompt="How many employees?")
-        assert resp.content is not None
+        assert resp.generation_mode == "error"
+        assert resp.provider_error is not None
+        assert resp.fallback_used is False
+        assert resp.content == ""
         assert len(resp.prompt_hash) == 64
         assert len(resp.response_hash) == 64
 
