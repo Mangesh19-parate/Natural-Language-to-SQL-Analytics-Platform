@@ -1,48 +1,56 @@
+import random
 from locust import HttpUser, task, between
 
 
-class SQLAssistantUser(HttpUser):
+class SQLAnalyticsUser(HttpUser):
     """
-    Locust Load Test Scenario (Task T-46 / REQ-PERF-01 / Week 14 P1).
-    Simulates 50 concurrent analytical users executing real workloads against the API.
+    Simulates high-concurrency analyst workflows against the Trust Engine API.
+    Used for Locust load testing across 10, 25, 50, 100, and 250 concurrent virtual users.
     """
-    wait_time = between(0.5, 2.0)
+    wait_time = between(0.1, 0.5)
 
-    @task(3)
-    def test_health_check(self):
-        self.client.get("/api/health")
-
-    @task(5)
-    def test_intent_classification(self):
-        payload = {
-            "question": "Show top 5 customers by revenue",
-            "role_id": 1,
-            "data_source_id": 1
+    def on_start(self):
+        """Logs in or uses pre-generated test Bearer token."""
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test_load_token",
         }
-        self.client.post("/api/intent/classify", json=payload)
 
     @task(4)
-    def test_sql_generation_and_policy(self):
+    def validate_sql_query(self):
+        """Simulates SQL AST validation and Policy Gate check."""
+        queries = [
+            "SELECT employee_id, first_name, department_id FROM employees WHERE department_id = 1",
+            "SELECT customer_id, customer_name, country FROM customers WHERE country = 'USA'",
+            "SELECT product_id, product_name, unit_price FROM products WHERE unit_price > 50",
+        ]
         payload = {
-            "question": "What is total sales revenue?",
-            "role_id": 1,
-            "data_source_id": 1
+            "sql": random.choice(queries),
+            "data_source_id": 1,
+            "role_id": 4,
         }
-        self.client.post("/api/sql/generate", json=payload)
+        self.client.post("/api/sql/validate", json=payload, headers=self.headers, name="POST /api/sql/validate")
+
+    @task(3)
+    def optimize_join_plan(self):
+        """Simulates Bitmask DP and Greedy Cost-Based Join Optimizer requests."""
+        queries = [
+            "SELECT * FROM employees e JOIN departments d ON e.department_id = d.department_id JOIN sales s ON e.employee_id = s.employee_id",
+            "SELECT c.customer_name, o.order_date, p.product_name FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN products p ON o.order_id = p.product_id",
+        ]
+        payload = {
+            "sql": random.choice(queries),
+            "data_source_id": 1,
+            "max_allowed_cost": 500000.0,
+        }
+        self.client.post("/api/optimize/join-plan", json=payload, headers=self.headers, name="POST /api/optimize/join-plan")
 
     @task(2)
-    def test_failure_observatory_stats(self):
-        self.client.get("/api/observatory/stats")
-
-    @task(2)
-    def test_query_history(self):
-        self.client.get("/api/history?limit=10")
+    def check_health(self):
+        """Simulates lightweight health and metrics polling."""
+        self.client.get("/api/health", name="GET /api/health")
 
     @task(1)
-    def test_compound_planner_agent(self):
-        payload = {
-            "question": "Compare revenue from 2023 vs 2024 and calculate growth",
-            "role_id": 1,
-            "data_source_id": 1
-        }
-        self.client.post("/api/agent/execute", json=payload)
+    def get_policies(self):
+        """Simulates policy matrix inspection."""
+        self.client.get("/api/policy", headers=self.headers, name="GET /api/policy")
