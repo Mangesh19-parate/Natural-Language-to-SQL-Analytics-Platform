@@ -328,7 +328,8 @@ class SQLASTParser:
         """
         Task T-21 / REQ-AUTH-03: Row-Filter Injection Engine.
         Automatically rewrites the AST to apply table-specific row filters (e.g. department_id = 2)
-        directly into the query's WHERE clause. Unremovable by the LLM's proposed SQL.
+        directly into every SELECT/subquery scope's WHERE clause where the target table is used.
+        Unremovable by the LLM's proposed SQL.
         """
         if not sql or not table_filters:
             return sql
@@ -338,30 +339,32 @@ class SQLASTParser:
         except Exception:
             return sql
 
-        # Build alias map
-        alias_map: Dict[str, str] = {}  # table_name -> alias (or table_name)
-        for table in ast.find_all(exp.Table):
-            t_name = table.name.lower() if table.name else ""
-            if t_name:
-                alias = table.alias if table.alias else t_name
-                alias_map[t_name] = alias
+        # Iterate over all Select nodes (root, CTE bodies, subqueries)
+        select_nodes = list(ast.find_all(exp.Select))
+        if not select_nodes and isinstance(ast, exp.Select):
+            select_nodes = [ast]
 
-        # Apply each active filter
-        for t_name, raw_filter in table_filters.items():
-            t_name_lower = t_name.lower()
-            if t_name_lower in alias_map:
-                alias = alias_map[t_name_lower]
-                # Parse filter SQL into expression
-                try:
-                    filter_ast = parse_one(raw_filter, read="postgres")
-                    # If table is aliased and filter is unaliased, qualify columns
-                    if alias != t_name_lower:
+        for select_node in select_nodes:
+            # Map tables in this specific select scope
+            local_alias_map: Dict[str, str] = {}
+            for table in select_node.find_all(exp.Table):
+                t_name = table.name.lower() if table.name else ""
+                if t_name:
+                    alias = table.alias if table.alias else t_name
+                    local_alias_map[t_name] = alias
+
+            for t_name, raw_filter in table_filters.items():
+                t_name_lower = t_name.lower()
+                if t_name_lower in local_alias_map:
+                    alias = local_alias_map[t_name_lower]
+                    try:
+                        filter_ast = parse_one(raw_filter, read="postgres")
+                        # Qualify columns with alias
                         for col in filter_ast.find_all(exp.Column):
                             if not col.table:
                                 col.set("table", exp.to_identifier(alias))
-                    
-                    ast.where(filter_ast, copy=False)
-                except Exception:
-                    pass
+                        select_node.where(filter_ast, copy=False)
+                    except Exception:
+                        pass
 
         return ast.sql(dialect="postgres")

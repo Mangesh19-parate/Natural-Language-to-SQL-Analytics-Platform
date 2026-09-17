@@ -50,7 +50,7 @@ def seed_lab_api_data(db_session: Session):
 
 
 def test_security_attack_run_api(seed_lab_api_data: dict):
-    """Test POST /api/lab/security/run executes the 128-attack adversarial suite."""
+    """Test POST /api/lab/security/run executes the standing adversarial suite."""
     headers = seed_lab_api_data["headers"]
     payload = {
         "data_source_id": seed_lab_api_data["ds_id"]
@@ -59,12 +59,12 @@ def test_security_attack_run_api(seed_lab_api_data: dict):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["total_attacks"] == 128
-    assert data["total_blocked"] == 128
+    assert data["total_attacks"] >= 128
+    assert data["total_blocked"] == data["total_attacks"]
     assert data["total_unblocked"] == 0
     assert data["safety_violation_rate"] == 0.0
     assert data["status"] == "PASSED"
-    assert len(data["results"]) == 128
+    assert len(data["results"]) == data["total_attacks"]
 
 
 def test_security_attack_latest_api(seed_lab_api_data: dict):
@@ -84,7 +84,8 @@ def test_security_attack_latest_api(seed_lab_api_data: dict):
     response = client.get("/api/lab/security/latest", headers=headers)
     assert response.status_code == 200
     data = response.json()
-    assert data["total_attacks"] == 128
+    assert data["total_attacks"] >= 128
+    assert data["total_blocked"] == data["total_attacks"]
     assert data["status"] == "PASSED"
 
 

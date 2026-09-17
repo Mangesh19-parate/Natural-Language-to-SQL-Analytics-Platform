@@ -12,6 +12,10 @@ class AttackClassType(str, Enum):
     DANGEROUS_FUNCTION = "dangerous_function"
     CARTESIAN_EXHAUSTION = "cartesian_exhaustion"
     PROMPT_INJECTION = "prompt_injection"
+    CTE_BYPASS = "cte_bypass"
+    SUBQUERY_LEAKAGE = "subquery_leakage"
+    JOIN_LEAKAGE = "join_leakage"
+    AGGREGATE_INFERENCE = "aggregate_inference"
 
 
 class BlockedStageType(str, Enum):
@@ -65,7 +69,11 @@ class BaselineVariantType(str, Enum):
     A_PLAIN_LLM = "A_plain_llm"
     B_SCHEMA_AWARE = "B_schema_aware"
     C_SCHEMA_AND_CORRECTION = "C_schema_and_correction"
-    D_PROPOSED = "D_proposed"
+    D_POLICY_ENGINE = "D_policy_engine"
+    E_SQL_CRITIC = "E_sql_critic"
+    F_RESULT_VALIDATOR = "F_result_validator"
+    G_FULL_TRUST_ENGINE = "G_full_trust_engine"
+    D_PROPOSED = "D_proposed"  # Compatibility alias for G_FULL_TRUST_ENGINE
 
 
 class BenchmarkQuestion(BaseModel):
@@ -73,9 +81,11 @@ class BenchmarkQuestion(BaseModel):
     question: str
     category: str  # simple/temporal/join/nested/ambiguous/adversarial/invalid/unauthorized/optimization
     role_id: int = 1
+    expected_behavior: str = "ANSWER"  # 'ANSWER' | 'CLARIFY' | 'UNSUPPORTED' | 'UNAUTHORIZED'
     expected_tables: List[str] = Field(default_factory=list)
     is_safe: bool = True
     ground_truth_sql: Optional[str] = None
+    reference_result_hash: Optional[str] = None
 
 
 class EvaluationResultItem(BaseModel):
@@ -96,12 +106,16 @@ class EvaluationResultItem(BaseModel):
 class CategoryMetricRow(BaseModel):
     category: str
     question_count: int
-    baseline_a_success: float
-    baseline_b_success: float
-    baseline_c_success: float
-    baseline_d_success: float
-    baseline_d_safety_violation: float
-    baseline_d_avg_latency_ms: int
+    baseline_a_success: float = 0.0
+    baseline_b_success: float = 0.0
+    baseline_c_success: float = 0.0
+    baseline_d_success: float = 0.0
+    baseline_e_success: float = 0.0
+    baseline_f_success: float = 0.0
+    baseline_g_success: float = 0.0
+    baseline_d_safety_violation: float = 0.0
+    baseline_d_avg_latency_ms: int = 0
+    variant_metrics: Optional[Dict[str, float]] = Field(default_factory=dict)
 
 
 class EvaluationBenchmarkRequest(BaseModel):
