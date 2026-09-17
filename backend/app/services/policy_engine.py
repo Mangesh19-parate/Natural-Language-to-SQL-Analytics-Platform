@@ -62,6 +62,8 @@ class PolicyLookupService:
             denied_cols: Set[str] = set()
             agg_allowed_cols: Set[str] = set()
 
+            is_table_denied = table_level_row is not None and table_level_row.access_level == "denied"
+
             if table_level_row:
                 if table_level_row.access_level in ("read", "read_aggregate_only"):
                     table_accessible = True
@@ -70,23 +72,24 @@ class PolicyLookupService:
                 if table_level_row.aggregate_allowed:
                     agg_allowed_cols.add("*")
 
-            # Apply column-specific rules
+            # Apply column-specific rules only if table is not explicitly denied
             for c_row in column_rows:
                 c_name = c_row.column_name.lower()
                 if c_row.access_level == "denied":
                     denied_cols.add(c_name)
                     allowed_cols.discard(c_name)
                 elif c_row.access_level in ("read", "read_aggregate_only"):
-                    table_accessible = True  # If at least one column is readable, table is accessible for those columns
-                    allowed_cols.add(c_name)
-                    denied_cols.discard(c_name)
+                    if not is_table_denied:
+                        table_accessible = True  # If at least one column is readable, table is accessible for those columns
+                        allowed_cols.add(c_name)
+                        denied_cols.discard(c_name)
 
                 if c_row.aggregate_allowed:
                     agg_allowed_cols.add(c_name)
                 if c_row.row_filter_sql and not row_filter_sql:
                     row_filter_sql = c_row.row_filter_sql
 
-            if table_accessible:
+            if table_accessible and not is_table_denied:
                 summary.accessible_tables[table_name] = EffectiveTablePolicy(
                     table_name=table_name,
                     accessible=True,
@@ -100,17 +103,30 @@ class PolicyLookupService:
         return summary
 
     @staticmethod
-    def is_table_accessible(db: Session, role_id: int, data_source_id: int, table_name: str) -> bool:
+    def is_table_accessible(
+        db: Session,
+        role_id: int,
+        data_source_id: int,
+        table_name: str,
+        effective_policy: Optional[EffectivePolicySummary] = None,
+    ) -> bool:
         """Deny-by-default check: is the given table accessible by this role? (Rule R1.2 / T-16)"""
-        policy = PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
+        policy = effective_policy or PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
         return table_name.lower() in policy.accessible_tables and policy.accessible_tables[table_name.lower()].accessible
 
     @staticmethod
-    def is_column_accessible(db: Session, role_id: int, data_source_id: int, table_name: str, column_name: str) -> bool:
+    def is_column_accessible(
+        db: Session,
+        role_id: int,
+        data_source_id: int,
+        table_name: str,
+        column_name: str,
+        effective_policy: Optional[EffectivePolicySummary] = None,
+    ) -> bool:
         """Deny-by-default check: is the given column accessible by this role? (Rule R1.2 / T-17)"""
         t_name = table_name.lower()
         c_name = column_name.lower()
-        policy = PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
+        policy = effective_policy or PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
         
         if t_name not in policy.accessible_tables:
             return False
@@ -129,11 +145,18 @@ class PolicyLookupService:
         return table_pol.access_level in ("read", "read_aggregate_only")
 
     @staticmethod
-    def is_aggregate_allowed(db: Session, role_id: int, data_source_id: int, table_name: str, column_name: str) -> bool:
+    def is_aggregate_allowed(
+        db: Session,
+        role_id: int,
+        data_source_id: int,
+        table_name: str,
+        column_name: str,
+        effective_policy: Optional[EffectivePolicySummary] = None,
+    ) -> bool:
         """Checks if aggregate functions (AVG, SUM, MIN, MAX) are permitted on a sensitive column (Rule R1.4 / T-18)."""
         t_name = table_name.lower()
         c_name = column_name.lower()
-        policy = PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
+        policy = effective_policy or PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
         
         if t_name not in policy.accessible_tables:
             return False
@@ -160,10 +183,16 @@ class PolicyLookupService:
         return False
 
     @staticmethod
-    def get_row_filter(db: Session, role_id: int, data_source_id: int, table_name: str) -> Optional[str]:
+    def get_row_filter(
+        db: Session,
+        role_id: int,
+        data_source_id: int,
+        table_name: str,
+        effective_policy: Optional[EffectivePolicySummary] = None,
+    ) -> Optional[str]:
         """Retrieves row-level filter SQL clause to be injected for this role (Rule R1.2 / SEC-3)."""
         t_name = table_name.lower()
-        policy = PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
+        policy = effective_policy or PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
         if t_name not in policy.accessible_tables:
             return None
         return policy.accessible_tables[t_name].row_filter_sql
@@ -258,9 +287,12 @@ class PolicyEngine:
                 )
             )
 
+        # Single-Trip Policy Resolution: Pre-fetch effective policy once for all node authorization steps
+        effective_policy = PolicyLookupService.get_effective_policy(db, role_id, data_source_id)
+
         # Step 4: Schema / Table Authorization (T-16 / REQ-SAFE-02 — Deny by default)
         for table_name in analysis.tables:
-            if not PolicyLookupService.is_table_accessible(db, role_id, data_source_id, table_name):
+            if not PolicyLookupService.is_table_accessible(db, role_id, data_source_id, table_name, effective_policy=effective_policy):
                 violations.append(
                     PolicyViolation(
                         violation_type=PolicyViolationType.UNAUTHORIZED_TABLE,
@@ -281,7 +313,7 @@ class PolicyEngine:
         # Step 5: Column Authorization (T-17 / REQ-SAFE-02)
         for table_name, columns in analysis.table_columns.items():
             for col_name in columns:
-                if not PolicyLookupService.is_column_accessible(db, role_id, data_source_id, table_name, col_name):
+                if not PolicyLookupService.is_column_accessible(db, role_id, data_source_id, table_name, col_name, effective_policy=effective_policy):
                     violations.append(
                         PolicyViolation(
                             violation_type=PolicyViolationType.UNAUTHORIZED_COLUMN,
@@ -297,7 +329,7 @@ class PolicyEngine:
             t_name = agg["table"]
             c_name = agg["column"]
 
-            if not PolicyLookupService.is_aggregate_allowed(db, role_id, data_source_id, t_name, c_name):
+            if not PolicyLookupService.is_aggregate_allowed(db, role_id, data_source_id, t_name, c_name, effective_policy=effective_policy):
                 violations.append(
                     PolicyViolation(
                         violation_type=PolicyViolationType.UNAUTHORIZED_AGGREGATE,
@@ -314,7 +346,7 @@ class PolicyEngine:
         # Step 7: Collect and Inject Applicable Row Filters (T-21 / Rule R1.2 / SEC-3)
         applied_row_filters: Dict[str, str] = {}
         for t_name in analysis.tables:
-            rf = PolicyLookupService.get_row_filter(db, role_id, data_source_id, t_name)
+            rf = PolicyLookupService.get_row_filter(db, role_id, data_source_id, t_name, effective_policy=effective_policy)
             if rf:
                 applied_row_filters[t_name] = rf
 

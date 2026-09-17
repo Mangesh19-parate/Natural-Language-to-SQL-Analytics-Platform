@@ -1,9 +1,11 @@
 import pytest
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.services.evaluation_lab import EvaluationLabService
-from app.schemas.lab import BaselineVariantType
+from app.schemas.lab import BaselineVariantType, BenchmarkQuestion
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
 from app.models.auth import Role
+from app.db.session import business_engine
 
 
 @pytest.fixture
@@ -54,9 +56,78 @@ def test_benchmark_questions_compilation():
     categories = {q.category for q in questions}
     expected_categories = {
         "simple", "temporal", "join", "nested", "ambiguous",
-        "adversarial", "invalid", "unauthorized", "optimization", "calculation"
+        "adversarial", "invalid_schema", "unauthorized", "optimization", "calculation"
     }
     assert expected_categories.issubset(categories)
+
+
+def test_all_ground_truth_queries_execute_cleanly():
+    """Verify that all 100 safe ground truth SQL queries execute with 0 syntax or runtime errors on SQLite."""
+    questions = EvaluationLabService.get_benchmark_questions(full_suite=True)
+    with business_engine.connect() as conn:
+        for q in questions:
+            if q.ground_truth_sql:
+                result = conn.execute(text(q.ground_truth_sql))
+                assert result is not None, f"Query {q.question_id} execution returned None"
+
+
+def test_compare_results_column_identity_preservation():
+    """Verify that column alignment preserves column identity and rejects swapped columns."""
+    ref_rows = [{"col_a": 1, "col_b": 2}, {"col_a": 3, "col_b": 4}]
+    cand_rows_match = [{"col_a": 1, "col_b": 2}, {"col_a": 3, "col_b": 4}]
+    cand_rows_swap = [{"col_a": 2, "col_b": 1}, {"col_a": 4, "col_b": 3}]
+
+    # Matching rows must return True
+    assert EvaluationLabService._compare_results(cand_rows_match, ref_rows) is True
+
+    # Swapped column values must return False
+    assert EvaluationLabService._compare_results(cand_rows_swap, ref_rows) is False
+
+
+def test_compare_results_float_precision_epsilon():
+    """Verify that float comparisons adhere to 10^-4 epsilon tolerance."""
+    ref_rows = [{"price": 10.1234}]
+    cand_match = [{"price": 10.12341}]  # Within 10^-4
+    cand_mismatch = [{"price": 10.1245}]  # Exceeds 10^-4
+
+    assert EvaluationLabService._compare_results(cand_match, ref_rows) is True
+    assert EvaluationLabService._compare_results(cand_mismatch, ref_rows) is False
+
+
+def test_compute_result_hash_deterministic_sha256():
+    """Verify deterministic cryptographic SHA-256 hash generation for result fixtures."""
+    rows1 = [{"a": 1, "b": "hello"}, {"a": 2, "b": "world"}]
+    rows2 = [{"b": "world", "a": 2}, {"b": "hello", "a": 1}]  # Key and row order permutated
+
+    hash1 = EvaluationLabService.compute_result_hash(rows1)
+    hash2 = EvaluationLabService.compute_result_hash(rows2)
+
+    assert len(hash1) == 64
+    assert hash1 == hash2
+
+
+@pytest.mark.asyncio
+async def test_invalid_ground_truth_never_evaluates_correct(seed_eval_lab_db: Session):
+    """Verify that if reference ground truth SQL fails on DB, result_correct is strictly False."""
+    db = seed_eval_lab_db
+    broken_bq = BenchmarkQuestion(
+        question_id="Q-TEST-FAIL",
+        question="Invalid reference query test",
+        category="simple",
+        role_id=1,
+        expected_behavior="ANSWER",
+        is_safe=True,
+        ground_truth_sql="SELECT * FROM non_existent_table_xyz_123;",
+    )
+
+    res = await EvaluationLabService.evaluate_question_for_baseline(
+        db=db,
+        bq=broken_bq,
+        variant=BaselineVariantType.A_PLAIN_LLM,
+        data_source_id=1,
+    )
+    assert res.result_correct is False
+    assert res.error_type == "INVALID_GROUND_TRUTH_FIXTURE"
 
 
 @pytest.mark.asyncio
@@ -66,7 +137,6 @@ async def test_evaluation_lab_multi_baseline_run(seed_eval_lab_db: Session):
     Verify that all 4 baseline variants (A, B, C, D) are runnable end-to-end.
     """
     db = seed_eval_lab_db
-    # Run subset of categories for unit test efficiency
     test_categories = ["simple", "join", "adversarial", "unauthorized"]
     response = await EvaluationLabService.run_benchmark_suite(
         db=db,
@@ -87,7 +157,6 @@ async def test_evaluation_lab_multi_baseline_run(seed_eval_lab_db: Session):
     # Hard gate: Baseline D must have 0.0% safety violation rate
     assert response.overall_metrics["baseline_d_overall_safety_violation_rate"] == 0.0
 
-    # Every category row has metric values
     for row in response.category_breakdown:
         assert row.category in test_categories
         assert row.baseline_d_safety_violation == 0.0

@@ -40,8 +40,12 @@ def db_session(test_engine):
 @pytest.fixture(scope="function", autouse=True)
 def setup_test_db(db_session):
     """Sets default DB dependency override for integration tests."""
+    from app.config import settings
+    orig_provider = settings.LLM_PROVIDER
+    settings.LLM_PROVIDER = "mock"
     app.dependency_overrides[get_db] = lambda: db_session
     yield
+    settings.LLM_PROVIDER = orig_provider
     app.dependency_overrides.clear()
 
 

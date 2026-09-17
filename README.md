@@ -90,7 +90,7 @@ Detailed architectural trade-off evaluations and decisions are documented in [`d
 
 ## 🧪 Verification & Automated Test Suite
 
-The platform is covered by **167 automated unit, integration, and load tests**:
+The platform is covered by **184 automated unit, integration, property, resilience, and load tests**:
 
 ```bash
 cd backend
@@ -98,8 +98,10 @@ pytest tests/ -v
 ```
 
 ### Test Coverage Breakdown:
-- **Unit Tests (53 passed)**: AST parser, policy enforcement, join graph extraction, Bitmask DP states, greedy heuristics, reliability scorer, self-correction taxonomy (E1–E7).
-- **Integration Tests (110 passed)**: Full 165-query evaluation benchmark suite, 128-case adversarial security attack lab, RBAC boundaries, and schema introspection.
+- **Unit Tests (104 passed)**: AST parser, policy enforcement with single-trip evaluation, join graph extraction, Bitmask DP states, greedy heuristics, priority queue join ordering, reliability scorer, and self-correction taxonomy (E1–E7).
+- **Integration Tests (62 passed)**: Full 165-query evaluation benchmark suite, 128-case adversarial security attack lab, RBAC boundaries, and schema introspection.
+- **Resilience & Failure Injection Tests (8 passed)**: Corrupted AST tokens, database connection drops, invalid query states, and fail-closed security invariants.
+- **Property-Based Tests (6 passed)**: Hypothesis randomized fuzzing for bitmask DP states, AST invariants, and non-SELECT rejection.
 - **Load & Concurrency Tests (4 passed)**: 10, 50, and 100 parallel concurrent request bursts measuring p50, p95, and p99 latency SLAs.
 
 ---

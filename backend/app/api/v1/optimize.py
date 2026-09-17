@@ -275,7 +275,10 @@ def optimize_join_plan(
     exec_sql = policy_res.injected_sql or request.sql
     plan_response = CostBasedJoinOptimizer.optimize_query(
         sql=exec_sql,
+        engine=business_engine,
         max_allowed_cost=request.max_allowed_cost,
+        strict_admission=request.strict_admission,
+        benchmark=request.benchmark,
     )
     return plan_response
 

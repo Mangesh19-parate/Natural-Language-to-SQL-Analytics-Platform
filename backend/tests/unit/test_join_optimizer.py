@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import create_engine, text
 from app.schemas.agent import PlanSubTask
 from app.services.dag_validator import DAGValidator, DAGValidationError
 from app.services.join_optimizer import (
@@ -6,6 +7,8 @@ from app.services.join_optimizer import (
     JoinGraph,
     JoinEdge,
     DEFAULT_TABLE_STATS,
+    TableStatsProvider,
+    CalibratedTableStats,
 )
 from app.schemas.optimize import (
     JoinAlgorithmEnum,
@@ -70,7 +73,7 @@ def test_single_table_scan_plan():
     assert resp.search_strategy == "SINGLE_TABLE"
     assert resp.subsets_evaluated == 1
     assert resp.gate_decision == GateDecisionEnum.ALLOW
-    assert resp.plan_tree["operator"] == JoinAlgorithmEnum.TABLE_SCAN.value
+    assert resp.plan_tree["operator"] in [JoinAlgorithmEnum.TABLE_SCAN.value, JoinAlgorithmEnum.INDEX_SCAN.value]
 
 
 def test_two_table_join_optimization():
@@ -107,6 +110,28 @@ def test_three_table_join_bitmask_dp():
     assert resp.optimal_cost <= resp.naive_cost
 
 
+def test_ast_join_rewriter_genuine_transformation():
+    """Verify that optimizer generates genuinely rewritten SQL AST rather than comment-only decoration."""
+    sql = """
+        SELECT c.customer_name, o.total_amount, s.revenue
+        FROM sales s
+        JOIN orders o ON s.order_id = o.order_id
+        JOIN customers c ON o.customer_id = c.customer_id
+        WHERE c.city = 'London';
+    """
+    resp = CostBasedJoinOptimizer.optimize_query(sql)
+    opt_sql = resp.optimized_sql
+
+    assert opt_sql is not None
+    assert len(opt_sql) > 10
+    # Must NOT be just a comment wrapper
+    assert not opt_sql.startswith("-- Cost-Based Optimizer Rewritten Plan")
+    # Must contain proper FROM and JOIN keywords
+    assert "FROM" in opt_sql.upper()
+    assert "JOIN" in opt_sql.upper()
+    assert "WHERE" in opt_sql.upper()
+
+
 def test_cartesian_product_block_gate():
     """Verify that cross joins without join predicates are blocked by the safety gate."""
     sql = """
@@ -116,26 +141,28 @@ def test_cartesian_product_block_gate():
     resp = CostBasedJoinOptimizer.optimize_query(sql)
 
     assert resp.gate_decision == GateDecisionEnum.BLOCK_RUNAWAY_CARTESIAN
-    assert "Cartesian" in resp.gate_reason or "Cross join" in resp.gate_reason
+    assert "Cross join" in resp.gate_reason or "Cartesian" in resp.gate_reason
 
 
-def test_cost_exceeded_warn_gate():
-    """Verify that queries exceeding the maximum cost threshold produce a warning gate decision."""
+def test_cost_exceeded_strict_and_warn_gate():
+    """Verify that queries exceeding cost threshold trigger BLOCK_EXPENSIVE (strict) or WARN_EXPENSIVE."""
     sql = """
         SELECT c.customer_name, o.total_amount
         FROM customers c
         JOIN orders o ON c.customer_id = o.customer_id;
     """
-    # Force tiny threshold to trigger warning
-    resp = CostBasedJoinOptimizer.optimize_query(sql, max_allowed_cost=0.5)
+    # Strict admission (default)
+    resp_strict = CostBasedJoinOptimizer.optimize_query(sql, max_allowed_cost=0.01, strict_admission=True)
+    assert resp_strict.gate_decision == GateDecisionEnum.BLOCK_EXPENSIVE
+    assert "exceeds admission limit" in resp_strict.gate_reason
 
-    assert resp.gate_decision == GateDecisionEnum.WARN_EXPENSIVE
-    assert "exceeds threshold" in resp.gate_reason
+    # Permissive admission
+    resp_warn = CostBasedJoinOptimizer.optimize_query(sql, max_allowed_cost=0.01, strict_admission=False)
+    assert resp_warn.gate_decision == GateDecisionEnum.WARN_EXPENSIVE
 
 
 def test_greedy_join_fallback_large_query():
-    """Verify that join queries with >8 tables fallback to greedy minimum selectivity solver."""
-    # Synthesize query with 9 tables
+    """Verify that join queries with >8 tables fallback to greedy priority queue solver."""
     sql = """
         SELECT *
         FROM t1
@@ -153,3 +180,40 @@ def test_greedy_join_fallback_large_query():
     assert resp.search_strategy == "GREEDY_MIN_SELECTIVITY"
     assert len(resp.tables) == 9
     assert resp.optimal_cost > 0
+    assert resp.optimized_sql is not None
+
+
+def test_table_stats_provider_live_engine():
+    """Verify TableStatsProvider extracts real table row counts and primary keys from a live Engine."""
+    test_engine = create_engine("sqlite:///:memory:")
+    with test_engine.connect() as conn:
+        conn.execute(text("CREATE TABLE test_users (id INTEGER PRIMARY KEY, name TEXT);"))
+        conn.execute(text("INSERT INTO test_users (name) VALUES ('Alice'), ('Bob'), ('Charlie');"))
+        conn.commit()
+
+    stats_map, source = TableStatsProvider.get_stats_map(test_engine, force_refresh=True)
+    assert source == "live_engine"
+    assert "test_users" in stats_map
+    assert stats_map["test_users"].tuple_count == 3.0
+    assert stats_map["test_users"].primary_key == "id"
+
+
+def test_execution_benchmarking_live_engine():
+    """Verify benchmark_execution executes queries and asserts result set equivalence."""
+    test_engine = create_engine("sqlite:///:memory:")
+    with test_engine.connect() as conn:
+        conn.execute(text("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);"))
+        conn.execute(text("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, amount REAL);"))
+        conn.execute(text("INSERT INTO customers VALUES (1, 'Alice'), (2, 'Bob');"))
+        conn.execute(text("INSERT INTO orders VALUES (101, 1, 50.0), (102, 2, 75.0);"))
+        conn.commit()
+
+    orig_sql = "SELECT c.name, o.amount FROM customers c JOIN orders o ON c.id = o.customer_id;"
+    opt_sql = "SELECT c.name, o.amount FROM orders o JOIN customers c ON c.id = o.customer_id;"
+
+    bench = CostBasedJoinOptimizer.benchmark_execution(orig_sql, opt_sql, test_engine)
+    assert bench.results_equivalent is True
+    assert bench.row_count == 2
+    assert bench.validation_status == "VERIFIED_EQUIVALENT"
+    assert bench.original_exec_ms >= 0.0
+    assert bench.optimized_exec_ms >= 0.0

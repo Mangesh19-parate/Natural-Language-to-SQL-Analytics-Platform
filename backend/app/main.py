@@ -11,9 +11,10 @@ from app.core.logging_config import setup_logging
 # Initialize logging
 setup_logging(log_level="INFO", json_format=not settings.DEBUG)
 
-# Initialize tables for dev/local setup if they don't exist
-Base.metadata.create_all(bind=metadata_engine)
-BusinessBase.metadata.create_all(bind=business_admin_engine)
+# Initialize tables for dev/local setup if enabled (decoupled in production for privilege separation)
+if getattr(settings, "DEBUG", True) or getattr(settings, "AUTO_CREATE_TABLES", False):
+    Base.metadata.create_all(bind=metadata_engine)
+    BusinessBase.metadata.create_all(bind=business_admin_engine)
 
 app = FastAPI(
     title="Intelligent SQL Assistant (Trust Engine) API",

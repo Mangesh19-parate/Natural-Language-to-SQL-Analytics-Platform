@@ -1,16 +1,19 @@
 import re
 import math
 import heapq
+import time
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Set, Tuple
 import sqlglot
 from sqlglot import exp
+from sqlalchemy import Engine, inspect, text
 
 from app.schemas.optimize import (
     JoinAlgorithmEnum,
     GateDecisionEnum,
     JoinPlanResponse,
     JoinPlanRequest,
+    ExecutionBenchmarkResult,
 )
 
 
@@ -40,6 +43,93 @@ CPU_TUPLE_COST = 0.01         # Cost of processing 1 row in CPU
 CPU_INDEX_TUPLE_COST = 0.005  # Cost of index binary search per tuple
 CPU_HASH_COST = 0.02          # Cost of hashing key + hash table insert/probe
 CPU_SORT_COST = 0.03          # Cost of N log N sort comparison per tuple
+
+
+class TableStatsProvider:
+    """
+    Introspects and caches live database statistics (tuple counts, pages, indexes)
+    from SQLAlchemy Engine, falling back to schema defaults when offline.
+    """
+    _cache: Dict[str, CalibratedTableStats] = {}
+    _cache_source: str = "fallback_schema"
+    _last_refresh: Optional[datetime] = None
+    _ttl_seconds: int = 300
+
+    @classmethod
+    def get_stats_map(
+        cls,
+        engine: Optional[Engine] = None,
+        force_refresh: bool = False,
+    ) -> Tuple[Dict[str, CalibratedTableStats], str]:
+        now = datetime.now(timezone.utc)
+        if (
+            not force_refresh
+            and cls._cache
+            and cls._last_refresh
+            and (now - cls._last_refresh).total_seconds() < cls._ttl_seconds
+        ):
+            return cls._cache, cls._cache_source
+
+        if engine is None:
+            cls._cache = dict(DEFAULT_TABLE_STATS)
+            cls._cache_source = "calibrated_cache"
+            cls._last_refresh = now
+            return cls._cache, cls._cache_source
+
+        try:
+            inspector = inspect(engine)
+            table_names = inspector.get_table_names()
+            stats_map: Dict[str, CalibratedTableStats] = {}
+
+            with engine.connect() as conn:
+                for t_name in table_names:
+                    t_lower = t_name.lower()
+                    # 1. Live row count
+                    try:
+                        res = conn.execute(text(f'SELECT COUNT(*) FROM "{t_name}"'))
+                        tuple_count = float(res.scalar() or 0)
+                    except Exception:
+                        tuple_count = 100.0
+
+                    # 2. Primary key constraint
+                    try:
+                        pk_constraint = inspector.get_pk_constraint(t_name)
+                        pk_cols = pk_constraint.get("constrained_columns", []) if pk_constraint else []
+                        pk_name = pk_cols[0].lower() if pk_cols else "id"
+                    except Exception:
+                        pk_name = "id"
+
+                    # 3. Secondary indexes
+                    try:
+                        indexes_raw = inspector.get_indexes(t_name)
+                        indexes = [idx["name"].lower() for idx in indexes_raw if idx.get("name")]
+                    except Exception:
+                        indexes = []
+
+                    # 4. Page count estimation (8KB pages, ~128 bytes per row avg)
+                    page_count = max(1.0, math.ceil((tuple_count * 128.0) / 8192.0))
+
+                    stats_map[t_lower] = CalibratedTableStats(
+                        table_name=t_lower,
+                        tuple_count=tuple_count,
+                        page_count=page_count,
+                        primary_key=pk_name,
+                        indexes=indexes,
+                    )
+
+            if stats_map:
+                cls._cache = stats_map
+                cls._cache_source = "live_engine"
+                cls._last_refresh = now
+                return cls._cache, cls._cache_source
+
+        except Exception:
+            pass
+
+        cls._cache = dict(DEFAULT_TABLE_STATS)
+        cls._cache_source = "fallback_schema"
+        cls._last_refresh = now
+        return cls._cache, cls._cache_source
 
 
 class JoinEdge:
@@ -113,6 +203,7 @@ class JoinGraph:
         self.alias_to_table: Dict[str, str] = {}  # alias -> real table name
         self.edges: List[JoinEdge] = []
         self.filter_selectivity: Dict[str, float] = {}  # alias -> filter factor [0.0..1.0]
+        self.filter_columns: Dict[str, Set[str]] = {}   # alias -> set of filtered columns
         self._parse_ast()
 
     def _parse_ast(self):
@@ -132,6 +223,7 @@ class JoinGraph:
                 self.tables.append(alias)
                 self.alias_to_table[alias] = t_name
                 self.filter_selectivity[alias] = 1.0
+                self.filter_columns[alias] = set()
 
         # 2. Discover join predicates from ON clauses
         for join in parsed.find_all(exp.Join):
@@ -164,8 +256,9 @@ class JoinGraph:
         # Single-table filter selectivity estimation
         for col_expr in condition_node.find_all(exp.Column):
             t = col_expr.table.lower() if col_expr.table else ""
+            c_name = col_expr.name.lower()
             if t and t in self.filter_selectivity:
-                # Modulate selectivity based on predicate type
+                self.filter_columns[t].add(c_name)
                 parent = col_expr.parent
                 if isinstance(parent, (exp.EQ, exp.Between)):
                     self.filter_selectivity[t] = min(self.filter_selectivity[t], 0.15)
@@ -173,6 +266,30 @@ class JoinGraph:
                     self.filter_selectivity[t] = min(self.filter_selectivity[t], 0.33)
                 elif isinstance(parent, exp.Like):
                     self.filter_selectivity[t] = min(self.filter_selectivity[t], 0.20)
+
+    def is_table_indexed_for_query(self, alias: str) -> Tuple[bool, Optional[str]]:
+        """
+        Determines if table scan can utilize a Primary Key or Secondary Index.
+        Returns: (is_indexed, index_name)
+        """
+        t_name = self.alias_to_table.get(alias, alias)
+        stat = self.stats_map.get(t_name)
+        if not stat:
+            return False, None
+
+        # Check join edges for PK or index hits
+        for e in self.edges:
+            if e.table1 == alias and (e.col1 == stat.primary_key or any(e.col1 in idx for idx in stat.indexes)):
+                return True, stat.primary_key if e.col1 == stat.primary_key else (stat.indexes[0] if stat.indexes else None)
+            if e.table2 == alias and (e.col2 == stat.primary_key or any(e.col2 in idx for idx in stat.indexes)):
+                return True, stat.primary_key if e.col2 == stat.primary_key else (stat.indexes[0] if stat.indexes else None)
+
+        # Check filter columns
+        for c in self.filter_columns.get(alias, set()):
+            if c == stat.primary_key or any(c in idx for idx in stat.indexes):
+                return True, stat.primary_key if c == stat.primary_key else (stat.indexes[0] if stat.indexes else None)
+
+        return False, None
 
     def get_table_cardinality(self, alias: str) -> float:
         t_name = self.alias_to_table.get(alias, alias)
@@ -207,10 +324,12 @@ class CostBasedJoinOptimizer:
     COST-BASED QUERY PLANNING & JOIN ORDER OPTIMIZATION ENGINE.
     Implements:
     - AST Join Graph Construction
-    - Selinger Cost & Cardinality Model
+    - Live Catalog Statistics & Index Scan Modeling
     - Dynamic Programming with Bitmask States (O(3^N) optimal solver for N <= 8)
-    - Greedy Minimum-Selectivity Priority Queue Heuristic (for N > 8)
-    - Pre-execution Safety Gating (Detection of Cartesian blowups & cost thresholds)
+    - Greedy Minimum-Selectivity Min-Heap Priority Queue (O(N^2 log N) for N > 8)
+    - True SQLGlot AST Query Rewriting for Optimal Join Order
+    - Pre-execution Safety Gating (Detection of Cartesian blowups & strict cost thresholds)
+    - Execution Benchmarking (wall-clock latency & result set equivalence verification)
     """
 
     @classmethod
@@ -218,17 +337,27 @@ class CostBasedJoinOptimizer:
         cls,
         sql: str,
         custom_stats: Optional[Dict[str, CalibratedTableStats]] = None,
+        engine: Optional[Engine] = None,
         max_allowed_cost: float = 50000.0,
+        strict_admission: bool = True,
+        benchmark: bool = False,
     ) -> JoinPlanResponse:
         """
-        Computes the globally optimal physical join plan for a SQL query.
+        Computes the globally optimal physical join plan for a SQL query,
+        rewrites the AST with optimal join ordering, and evaluates admission safety.
         """
-        start_time = datetime.now(timezone.utc)
-        graph = JoinGraph(sql, custom_stats)
+        # 1. Resolve table statistics map
+        if custom_stats:
+            stats_map = custom_stats
+            stats_source = "custom"
+        else:
+            stats_map, stats_source = TableStatsProvider.get_stats_map(engine)
+
+        graph = JoinGraph(sql, stats_map)
         num_tables = len(graph.tables)
+        indexes_used: List[str] = []
 
         if num_tables == 0:
-            # Non-table query e.g. SELECT 1
             return JoinPlanResponse(
                 original_sql=sql,
                 optimized_sql=sql,
@@ -242,6 +371,9 @@ class CostBasedJoinOptimizer:
                 gate_decision=GateDecisionEnum.ALLOW,
                 gate_reason="Non-relational query",
                 plan_tree={"operator": "CONSTANT_SCAN", "cost": 0.1, "cardinality": 1.0},
+                indexes_used=[],
+                stats_source=stats_source,
+                execution_benchmark=None,
                 execution_recommendation="Safe for immediate execution",
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
@@ -250,9 +382,18 @@ class CostBasedJoinOptimizer:
             alias = graph.tables[0]
             card = graph.get_table_cardinality(alias)
             pages = graph.get_table_pages(alias)
-            cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
+            is_idx, idx_name = graph.is_table_indexed_for_query(alias)
+            if is_idx and idx_name:
+                indexes_used.append(f"{alias}.{idx_name}")
+                op = JoinAlgorithmEnum.INDEX_SCAN
+                pages_est = max(1.0, math.ceil(math.log2(max(pages, 2.0))))
+                cost = pages_est * PAGE_IO_COST + card * CPU_INDEX_TUPLE_COST
+            else:
+                op = JoinAlgorithmEnum.TABLE_SCAN
+                cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
+
             plan = PhysicalPlanNode(
-                operator=JoinAlgorithmEnum.TABLE_SCAN,
+                operator=op,
                 cardinality=card,
                 cost=cost,
                 tables_mask=1,
@@ -272,6 +413,9 @@ class CostBasedJoinOptimizer:
                 gate_decision=GateDecisionEnum.ALLOW,
                 gate_reason="Single table scan within cost limit",
                 plan_tree=plan.to_dict(),
+                indexes_used=indexes_used,
+                stats_source=stats_source,
+                execution_benchmark=None,
                 execution_recommendation="Single-table query verified with optimal sequential/index scan",
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
@@ -284,6 +428,9 @@ class CostBasedJoinOptimizer:
             optimal_plan, subsets_eval = cls._solve_greedy(graph)
             strategy = "GREEDY_MIN_SELECTIVITY"
 
+        # Collect indexes used in the chosen plan
+        cls._collect_indexes_used(optimal_plan, graph, indexes_used)
+
         # Compute naive left-deep plan cost for comparison
         naive_plan = cls._compute_naive_left_deep(graph)
         naive_cost = max(naive_plan.cost, 1.0)
@@ -295,18 +442,24 @@ class CostBasedJoinOptimizer:
         
         if has_cross_join:
             gate_decision = GateDecisionEnum.BLOCK_RUNAWAY_CARTESIAN
-            gate_reason = f"Cross join detected across {num_tables} tables with 0 join predicates. Rejected by optimizer."
+            gate_reason = f"Cross join detected across {num_tables} tables with 0 join predicates. Rejected by optimizer admission gate."
             rec = "CRITICAL: Missing JOIN ON predicates will cause Cartesian row explosion. Execution blocked."
         elif optimal_cost > max_allowed_cost:
-            gate_decision = GateDecisionEnum.WARN_EXPENSIVE
-            gate_reason = f"Estimated cost ({round(optimal_cost, 1)}) exceeds threshold ({max_allowed_cost})."
-            rec = "High-cost execution. Consider adding selective index filters or restricting join scope."
+            gate_decision = GateDecisionEnum.BLOCK_EXPENSIVE if strict_admission else GateDecisionEnum.WARN_EXPENSIVE
+            gate_reason = f"Estimated cost ({round(optimal_cost, 1)}) exceeds admission limit ({max_allowed_cost})."
+            rec = "High-cost execution blocked by admission gate. Add indexed filters or restrict join scope."
         else:
             gate_decision = GateDecisionEnum.ALLOW
-            gate_reason = f"Cost ({round(optimal_cost, 1)}) is well within deterministic resource threshold."
+            gate_reason = f"Cost ({round(optimal_cost, 1)}) is within deterministic resource threshold."
             rec = f"Optimal join order computed using {strategy}. Estimated cost reduction: {reduction_pct}%."
 
+        # Generate genuine rewritten SQL based on optimal join tree
         optimized_sql = cls._generate_optimized_sql(graph, optimal_plan, sql)
+
+        # Optional execution benchmark profiling
+        exec_benchmark = None
+        if benchmark and engine and gate_decision == GateDecisionEnum.ALLOW:
+            exec_benchmark = cls.benchmark_execution(sql, optimized_sql, engine)
 
         return JoinPlanResponse(
             original_sql=sql,
@@ -321,9 +474,23 @@ class CostBasedJoinOptimizer:
             gate_decision=gate_decision,
             gate_reason=gate_reason,
             plan_tree=optimal_plan.to_dict(),
+            indexes_used=indexes_used,
+            stats_source=stats_source,
+            execution_benchmark=exec_benchmark,
             execution_recommendation=rec,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
+
+    @classmethod
+    def _collect_indexes_used(cls, node: PhysicalPlanNode, graph: JoinGraph, out_list: List[str]):
+        if node.operator == JoinAlgorithmEnum.INDEX_SCAN and node.alias:
+            is_idx, idx_name = graph.is_table_indexed_for_query(node.alias)
+            if idx_name:
+                out_list.append(f"{node.alias}.{idx_name}")
+        if node.left_child:
+            cls._collect_indexes_used(node.left_child, graph, out_list)
+        if node.right_child:
+            cls._collect_indexes_used(node.right_child, graph, out_list)
 
     @classmethod
     def _calculate_join_cost(
@@ -352,7 +519,16 @@ class CostBasedJoinOptimizer:
         nlj_cost = plan1.cost + plan1.cardinality * plan2.cost + (plan1.cardinality * plan2.cardinality) * CPU_TUPLE_COST
         
         # 3. Sort Merge Join
-        smj_cost = plan1.cost + plan2.cost + (plan1.cardinality * math.log2(max(plan1.cardinality, 2.0)) + plan2.cardinality * math.log2(max(plan2.cardinality, 2.0))) * CPU_SORT_COST + (plan1.cardinality + plan2.cardinality) * CPU_TUPLE_COST
+        smj_cost = (
+            plan1.cost
+            + plan2.cost
+            + (
+                plan1.cardinality * math.log2(max(plan1.cardinality, 2.0))
+                + plan2.cardinality * math.log2(max(plan2.cardinality, 2.0))
+            )
+            * CPU_SORT_COST
+            + (plan1.cardinality + plan2.cardinality) * CPU_TUPLE_COST
+        )
 
         if not connecting_edges:
             hj_cost *= 10.0
@@ -385,9 +561,17 @@ class CostBasedJoinOptimizer:
             mask = 1 << i
             card = graph.get_table_cardinality(alias)
             pages = graph.get_table_pages(alias)
-            cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
+            is_idx, idx_name = graph.is_table_indexed_for_query(alias)
+            if is_idx:
+                op = JoinAlgorithmEnum.INDEX_SCAN
+                pages_est = max(1.0, math.ceil(math.log2(max(pages, 2.0))))
+                cost = pages_est * PAGE_IO_COST + card * CPU_INDEX_TUPLE_COST
+            else:
+                op = JoinAlgorithmEnum.TABLE_SCAN
+                cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
+
             dp[mask] = PhysicalPlanNode(
-                operator=JoinAlgorithmEnum.TABLE_SCAN,
+                operator=op,
                 cardinality=card,
                 cost=cost,
                 tables_mask=mask,
@@ -445,66 +629,122 @@ class CostBasedJoinOptimizer:
     @classmethod
     def _solve_greedy(cls, graph: JoinGraph) -> Tuple[PhysicalPlanNode, int]:
         """
-        Greedy minimum-selectivity join algorithm for large join graphs (N > 8).
+        Greedy minimum-selectivity join algorithm using a true Min-Heap Priority Queue in O(N^2 log N).
         """
         N = len(graph.tables)
-        active_nodes: List[PhysicalPlanNode] = []
+        active_clusters: Dict[int, PhysicalPlanNode] = {}
         subsets_evaluated = 0
+        entry_counter = 0
 
+        # 1. Base cluster creation
         for i in range(N):
             alias = graph.tables[i]
             card = graph.get_table_cardinality(alias)
             pages = graph.get_table_pages(alias)
-            cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
-            active_nodes.append(
-                PhysicalPlanNode(
-                    operator=JoinAlgorithmEnum.TABLE_SCAN,
-                    cardinality=card,
-                    cost=cost,
-                    tables_mask=1 << i,
-                    table_name=graph.alias_to_table.get(alias, alias),
-                    alias=alias,
-                )
+            is_idx, _ = graph.is_table_indexed_for_query(alias)
+            if is_idx:
+                op = JoinAlgorithmEnum.INDEX_SCAN
+                pages_est = max(1.0, math.ceil(math.log2(max(pages, 2.0))))
+                cost = pages_est * PAGE_IO_COST + card * CPU_INDEX_TUPLE_COST
+            else:
+                op = JoinAlgorithmEnum.TABLE_SCAN
+                cost = pages * PAGE_IO_COST + card * CPU_TUPLE_COST
+
+            active_clusters[i] = PhysicalPlanNode(
+                operator=op,
+                cardinality=card,
+                cost=cost,
+                tables_mask=1 << i,
+                table_name=graph.alias_to_table.get(alias, alias),
+                alias=alias,
             )
             subsets_evaluated += 1
 
-        while len(active_nodes) > 1:
-            best_pair = (0, 1)
-            best_candidate: Optional[PhysicalPlanNode] = None
+        # 2. Priority Queue initialized with all pairwise join candidates
+        pq: List[Tuple[float, int, int, int, PhysicalPlanNode]] = []
+        
+        for i in range(N):
+            for j in range(i + 1, N):
+                subsets_evaluated += 1
+                p1 = active_clusters[i]
+                p2 = active_clusters[j]
+                aliases1 = [graph.tables[k] for k in range(N) if (p1.tables_mask & (1 << k))]
+                aliases2 = [graph.tables[k] for k in range(N) if (p2.tables_mask & (1 << k))]
+                edges = graph.find_connecting_edges(aliases1, aliases2)
+                best_op, out_card, cost = cls._calculate_join_cost(p1, p2, edges)
+                pred_str = " AND ".join(e.raw_predicate for e in edges) if edges else "CROSS JOIN"
+                cand = PhysicalPlanNode(
+                    operator=best_op,
+                    cardinality=out_card,
+                    cost=cost,
+                    tables_mask=p1.tables_mask | p2.tables_mask,
+                    join_predicate=pred_str,
+                    left_child=p1,
+                    right_child=p2,
+                )
+                heapq.heappush(pq, (cost, entry_counter, i, j, cand))
+                entry_counter += 1
 
-            for i in range(len(active_nodes)):
-                for j in range(i + 1, len(active_nodes)):
-                    subsets_evaluated += 1
-                    p1 = active_nodes[i]
-                    p2 = active_nodes[j]
-                    aliases1 = [graph.tables[k] for k in range(N) if (p1.tables_mask & (1 << k))]
-                    aliases2 = [graph.tables[k] for k in range(N) if (p2.tables_mask & (1 << k))]
+        next_cluster_id = N
 
-                    edges = graph.find_connecting_edges(aliases1, aliases2)
-                    best_op, out_card, cost = cls._calculate_join_cost(p1, p2, edges)
-                    pred_str = " AND ".join(e.raw_predicate for e in edges) if edges else "CROSS JOIN"
+        # 3. Iterative greedy merge using heap
+        while len(active_clusters) > 1 and pq:
+            cost, _, c1, c2, cand = heapq.heappop(pq)
+            
+            # Skip stale heap entries where either cluster was already merged
+            if c1 not in active_clusters or c2 not in active_clusters:
+                continue
 
-                    cand = PhysicalPlanNode(
-                        operator=best_op,
-                        cardinality=out_card,
-                        cost=cost,
-                        tables_mask=p1.tables_mask | p2.tables_mask,
-                        join_predicate=pred_str,
-                        left_child=p1,
-                        right_child=p2,
-                    )
+            del active_clusters[c1]
+            del active_clusters[c2]
 
-                    if best_candidate is None or cand.cost < best_candidate.cost:
-                        best_candidate = cand
-                        best_pair = (i, j)
+            new_cid = next_cluster_id
+            next_cluster_id += 1
+            active_clusters[new_cid] = cand
 
-            # Merge winning pair
-            i, j = best_pair
-            node_j = active_nodes.pop(j)
-            node_i = active_nodes.pop(i)
-            active_nodes.append(best_candidate)
+            # Push new join candidates between merged cluster and all remaining clusters
+            cand_aliases = [graph.tables[k] for k in range(N) if (cand.tables_mask & (1 << k))]
+            for other_cid, other_node in list(active_clusters.items()):
+                if other_cid == new_cid:
+                    continue
+                subsets_evaluated += 1
+                other_aliases = [graph.tables[k] for k in range(N) if (other_node.tables_mask & (1 << k))]
+                edges = graph.find_connecting_edges(cand_aliases, other_aliases)
+                best_op, out_card, pair_cost = cls._calculate_join_cost(cand, other_node, edges)
+                pred_str = " AND ".join(e.raw_predicate for e in edges) if edges else "CROSS JOIN"
+                new_cand = PhysicalPlanNode(
+                    operator=best_op,
+                    cardinality=out_card,
+                    cost=pair_cost,
+                    tables_mask=cand.tables_mask | other_node.tables_mask,
+                    join_predicate=pred_str,
+                    left_child=cand,
+                    right_child=other_node,
+                )
+                heapq.heappush(pq, (pair_cost, entry_counter, new_cid, other_cid, new_cand))
+                entry_counter += 1
 
-        return active_nodes[0], subsets_evaluated
+        # Fallback if any disconnected components remain without heap items
+        while len(active_clusters) > 1:
+            c_ids = list(active_clusters.keys())
+            c1, c2 = c_ids[0], c_ids[1]
+            p1 = active_clusters.pop(c1)
+            p2 = active_clusters.pop(c2)
+            best_op, out_card, cost = cls._calculate_join_cost(p1, p2, [])
+            merged = PhysicalPlanNode(
+                operator=best_op,
+                cardinality=out_card,
+                cost=cost,
+                tables_mask=p1.tables_mask | p2.tables_mask,
+                join_predicate="CROSS JOIN",
+                left_child=p1,
+                right_child=p2,
+            )
+            active_clusters[next_cluster_id] = merged
+            next_cluster_id += 1
+
+        root_node = next(iter(active_clusters.values()))
+        return root_node, subsets_evaluated
 
     @classmethod
     def _compute_naive_left_deep(cls, graph: JoinGraph) -> PhysicalPlanNode:
@@ -556,26 +796,76 @@ class CostBasedJoinOptimizer:
 
         return curr
 
-
     @classmethod
     def _generate_optimized_sql(cls, graph: JoinGraph, plan: PhysicalPlanNode, original_sql: str) -> str:
         """
-        Generates clean rewritten SQL query reflecting the optimal join order.
+        Generates genuinely rewritten SQL query AST reflecting the optimal join order.
         """
         ordered_aliases = cls._extract_ordered_aliases(plan)
         if len(ordered_aliases) <= 1:
             return original_sql
 
         try:
-            parsed = sqlglot.parse_one(original_sql)
-            # Reorder from and join statements in AST
+            parsed = sqlglot.parse_one(original_sql, read="postgres")
+        except Exception:
+            try:
+                parsed = sqlglot.parse_one(original_sql)
+            except Exception:
+                return original_sql
+
+        if not isinstance(parsed, exp.Select):
+            return original_sql
+
+        try:
+            # 1. Map existing join types from the original query (INNER, LEFT, RIGHT, etc.)
+            original_join_kinds: Dict[str, str] = {}
+            for j in parsed.find_all(exp.Join):
+                tbl = j.this
+                if isinstance(tbl, exp.Table):
+                    alias = tbl.alias.lower() if tbl.alias else tbl.name.lower()
+                    kind = j.args.get("kind")
+                    if kind:
+                        original_join_kinds[alias] = str(kind).upper()
+                    elif j.args.get("side"):
+                        original_join_kinds[alias] = str(j.args.get("side")).upper()
+                    else:
+                        original_join_kinds[alias] = "INNER"
+
+            # 2. Rebuild FROM table
             first_alias = ordered_aliases[0]
             first_table = graph.alias_to_table.get(first_alias, first_alias)
+            if first_alias != first_table:
+                from_tbl = exp.Table(this=exp.to_identifier(first_table), alias=exp.TableAlias(this=exp.to_identifier(first_alias)))
+            else:
+                from_tbl = exp.Table(this=exp.to_identifier(first_table))
             
-            # Construct readable reordered query representation
-            lines = [f"-- Cost-Based Optimizer Rewritten Plan (Optimal Order: {' -> '.join(ordered_aliases)})"]
-            lines.append(original_sql.strip())
-            return "\n".join(lines)
+            parsed.set("from_", exp.From(this=from_tbl))
+
+            # 3. Rebuild sequential JOIN clauses in optimal order
+            placed_aliases: Set[str] = {first_alias}
+            new_joins: List[exp.Join] = []
+
+            for alias in ordered_aliases[1:]:
+                t_name = graph.alias_to_table.get(alias, alias)
+                if alias != t_name:
+                    tbl_join = exp.Table(this=exp.to_identifier(t_name), alias=exp.TableAlias(this=exp.to_identifier(alias)))
+                else:
+                    tbl_join = exp.Table(this=exp.to_identifier(t_name))
+
+                connecting_edges = graph.find_connecting_edges([alias], list(placed_aliases))
+                join_kind = original_join_kinds.get(alias, "INNER")
+
+                if connecting_edges:
+                    pred_str = " AND ".join(e.raw_predicate for e in connecting_edges)
+                    on_expr = sqlglot.parse_one(pred_str)
+                    new_joins.append(exp.Join(this=tbl_join, on=on_expr, kind=join_kind))
+                else:
+                    new_joins.append(exp.Join(this=tbl_join, kind="CROSS"))
+
+                placed_aliases.add(alias)
+
+            parsed.set("joins", new_joins)
+            return parsed.sql(pretty=True)
         except Exception:
             return original_sql
 
@@ -589,3 +879,54 @@ class CostBasedJoinOptimizer:
         if node.right_child:
             res.extend(cls._extract_ordered_aliases(node.right_child))
         return res
+
+    @classmethod
+    def benchmark_execution(
+        cls,
+        original_sql: str,
+        optimized_sql: str,
+        engine: Engine,
+    ) -> ExecutionBenchmarkResult:
+        """
+        Executes original and rewritten SQL queries against the database engine,
+        measures wall-clock execution latency, and verifies result equivalence.
+        """
+        def run_query(conn, query_str: str):
+            t0 = time.perf_counter()
+            result = conn.execute(text(query_str))
+            rows = result.fetchall()
+            t1 = time.perf_counter()
+            return rows, (t1 - t0) * 1000.0
+
+        try:
+            with engine.connect() as conn:
+                orig_rows, orig_time_ms = run_query(conn, original_sql)
+                opt_rows, opt_time_ms = run_query(conn, optimized_sql)
+
+            orig_count = len(orig_rows)
+            opt_count = len(opt_rows)
+            
+            # Serialize tuples for set equivalence check
+            orig_serialized = sorted([str(tuple(r)) for r in orig_rows])
+            opt_serialized = sorted([str(tuple(r)) for r in opt_rows])
+            results_match = (orig_serialized == opt_serialized)
+
+            speedup = round(orig_time_ms / max(opt_time_ms, 0.001), 2)
+
+            return ExecutionBenchmarkResult(
+                original_exec_ms=round(orig_time_ms, 3),
+                optimized_exec_ms=round(opt_time_ms, 3),
+                speedup_ratio=speedup,
+                results_equivalent=results_match,
+                row_count=orig_count,
+                validation_status="VERIFIED_EQUIVALENT" if results_match else "DATA_MISMATCH",
+            )
+        except Exception as e:
+            return ExecutionBenchmarkResult(
+                original_exec_ms=0.0,
+                optimized_exec_ms=0.0,
+                speedup_ratio=1.0,
+                results_equivalent=False,
+                row_count=0,
+                validation_status=f"BENCHMARK_ERROR: {str(e)}",
+            )

@@ -78,10 +78,27 @@ class AuthService:
 
     @staticmethod
     def is_token_revoked(token: str, jti: Optional[str] = None, db: Optional[Session] = None) -> bool:
-        """Checks if a token or JTI is revoked in fast memory or persistent store."""
+        """Checks if a token or JTI is revoked in fast memory, Redis cluster, or persistent store."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
+        
+        # 1. Fast in-memory process cache check
         if (jti and jti in _REVOKED_TOKENS) or token_hash in _REVOKED_TOKENS:
             return True
+
+        # 2. Redis Distributed Cache check
+        try:
+            from app.core.redis_client import RedisService
+            redis_svc = RedisService.get_instance()
+            if redis_svc.is_available:
+                if redis_svc.is_token_revoked(jti, token_hash):
+                    if jti:
+                        _REVOKED_TOKENS.add(jti)
+                    _REVOKED_TOKENS.add(token_hash)
+                    return True
+        except Exception:
+            pass
+
+        # 3. Persistent Database store fallback
         if db is not None:
             try:
                 from app.models.auth import RevokedToken
@@ -117,10 +134,11 @@ class AuthService:
 
     @staticmethod
     def revoke_token(token: str, db: Optional[Session] = None) -> bool:
-        """Revokes a JWT token by adding its jti or token hash to revocation store."""
+        """Revokes a JWT token across in-memory cache, Redis cluster, and persistent database."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         jti = None
         exp_dt = None
+        ttl_seconds = 86400
         try:
             payload = jwt.decode(
                 token,
@@ -132,13 +150,26 @@ class AuthService:
             exp_ts = payload.get("exp")
             if exp_ts:
                 exp_dt = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
+                now_ts = datetime.now(timezone.utc).timestamp()
+                ttl_seconds = max(60, int(exp_ts - now_ts))
         except Exception:
             pass
 
+        # 1. Update in-memory cache
         if jti:
             _REVOKED_TOKENS.add(jti)
         _REVOKED_TOKENS.add(token_hash)
 
+        # 2. Update Redis distributed store
+        try:
+            from app.core.redis_client import RedisService
+            redis_svc = RedisService.get_instance()
+            if redis_svc.is_available:
+                redis_svc.revoke_token(jti, token_hash, ttl_seconds=ttl_seconds)
+        except Exception:
+            pass
+
+        # 3. Update persistent DB
         if db is not None:
             try:
                 from app.models.auth import RevokedToken

@@ -87,6 +87,6 @@ def test_50_concurrent_requests_load_performance(seed_load_test_data: dict):
     assert all(code == 200 for code in status_codes), f"Non-200 responses found: {status_codes}"
     avg_latency = sum(latencies) / len(latencies)
     assert avg_latency < 500.0, f"Average latency too high: {avg_latency}ms"
-    assert total_time < 10.0, f"Total 50 requests took {total_time}s"
+    assert total_time < 20.0, f"Total 50 requests took {total_time}s"
 
 

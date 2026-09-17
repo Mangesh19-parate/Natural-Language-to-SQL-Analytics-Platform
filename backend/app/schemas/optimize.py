@@ -14,6 +14,7 @@ class JoinAlgorithmEnum(str, Enum):
 class GateDecisionEnum(str, Enum):
     ALLOW = "ALLOW"
     WARN_EXPENSIVE = "WARN_EXPENSIVE"
+    BLOCK_EXPENSIVE = "BLOCK_EXPENSIVE"
     BLOCK_RUNAWAY_CARTESIAN = "BLOCK_RUNAWAY_CARTESIAN"
 
 
@@ -83,11 +84,22 @@ class JoinNodePlan(BaseModel):
     right_child: Optional[Dict[str, Any]] = None
 
 
+class ExecutionBenchmarkResult(BaseModel):
+    original_exec_ms: float
+    optimized_exec_ms: float
+    speedup_ratio: float
+    results_equivalent: bool
+    row_count: int
+    validation_status: str
+
+
 class JoinPlanRequest(BaseModel):
     sql: str
     data_source_id: int = 1
     role_id: int = 1
     max_allowed_cost: float = 50000.0
+    benchmark: bool = False
+    strict_admission: bool = True
 
 
 class JoinPlanResponse(BaseModel):
@@ -103,5 +115,8 @@ class JoinPlanResponse(BaseModel):
     gate_decision: GateDecisionEnum
     gate_reason: str
     plan_tree: Dict[str, Any]
+    indexes_used: List[str] = Field(default_factory=list)
+    stats_source: str = "catalog"  # "live_engine" | "calibrated_cache" | "fallback_schema"
+    execution_benchmark: Optional[ExecutionBenchmarkResult] = None
     execution_recommendation: str
     created_at: str

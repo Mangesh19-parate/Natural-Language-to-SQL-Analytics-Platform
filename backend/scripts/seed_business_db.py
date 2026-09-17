@@ -1,6 +1,7 @@
 import os
 import sys
 import random
+import argparse
 from datetime import date, timedelta
 
 # Ensure backend root is in sys.path
@@ -17,10 +18,10 @@ Faker.seed(42)
 random.seed(42)
 
 
-def seed_business_database():
+def seed_business_database(force_reset: bool = False):
     """
     Seeds the sample enterprise business database with coherent relational data (Task T-02).
-    Ensures all 6 tables have >= 100 coherent rows (except departments which has realistic 10 core units).
+    Ensures idempotency: skips seeding if data already exists unless force_reset=True.
     """
     print("--- [T-02] Starting Business Database Seeding ---")
     
@@ -29,6 +30,23 @@ def seed_business_database():
     db: Session = BusinessAdminSessionLocal()
 
     try:
+        existing_customers = db.query(Customer).count()
+        if existing_customers > 0:
+            if not force_reset:
+                print(f"[INFO] Database already contains {existing_customers} customers. Seeding skipped (idempotent).")
+                print("Use --reset or force_reset=True to clean and re-seed.")
+                return
+            else:
+                print("[INFO] force_reset=True requested. Purging existing relational tables...")
+                db.query(Sale).delete()
+                db.query(Order).delete()
+                db.query(Product).delete()
+                db.query(Employee).delete()
+                db.query(Department).delete()
+                db.query(Customer).delete()
+                db.commit()
+                print("[OK] Purge complete.")
+
         # 1. Departments (10 departments)
         dept_names = [
             "Engineering", "Sales", "Marketing", "Human Resources",
@@ -154,4 +172,7 @@ def seed_business_database():
 
 
 if __name__ == "__main__":
-    seed_business_database()
+    parser = argparse.ArgumentParser(description="Seed business database with relational test data.")
+    parser.add_argument("--reset", action="store_true", help="Force reset and re-seed the database.")
+    args = parser.parse_args()
+    seed_business_database(force_reset=args.reset)

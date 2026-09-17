@@ -60,7 +60,7 @@ def test_benchmark_questions_suite_size():
     categories = set(q.category for q in questions)
     expected_categories = {
         "simple", "temporal", "join", "nested", "ambiguous",
-        "adversarial", "invalid", "unauthorized", "optimization", "calculation"
+        "adversarial", "invalid_schema", "unauthorized", "optimization", "calculation"
     }
     assert expected_categories.issubset(categories)
 
