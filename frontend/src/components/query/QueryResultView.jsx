@@ -18,7 +18,7 @@ export default function QueryResultView({
   const rows = executionResult?.rows || [];
   const columns = executionResult?.columns || [];
   const rowCount = executionResult?.row_count ?? rows.length;
-  const executionMs = executionResult?.latency_ms ?? 12;
+  const executionMs = executionResult?.latency_ms ?? 0;
 
   return (
     <div

@@ -63,6 +63,7 @@ class EvaluationResult(Base):
     run_id = Column(String(36), ForeignKey("evaluation_run.run_id"), nullable=False, index=True)
     question_id = Column(String(20), nullable=False)
     category = Column(String(30), nullable=False, index=True)  # simple/temporal/join/nested/ambiguous/adversarial/invalid/unauthorized/optimization
+    baseline_variant = Column(String(40), nullable=True, index=True)
     execution_success = Column(Boolean, default=False)
     result_correct = Column(Boolean, default=False)
     error_type = Column(String(10), nullable=True)  # E1..E7 if failed
@@ -73,3 +74,4 @@ class EvaluationResult(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     run = relationship("EvaluationRun", back_populates="results")
+

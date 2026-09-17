@@ -28,9 +28,9 @@ export default function App() {
     business_db_connected: true,
     version: '1.2.0',
   });
-  const [selectedRole, setSelectedRole] = useState(1); // 1: admin, 2: analyst, 3: viewer
-  const [selectedRoleName, setSelectedRoleName] = useState('admin');
-  const [activeUserEmail, setActiveUserEmail] = useState('admin@trustengine.ai');
+  const [selectedRole, setSelectedRole] = useState(() => Number(localStorage.getItem('auth_role_id')) || 1);
+  const [selectedRoleName, setSelectedRoleName] = useState(() => localStorage.getItem('auth_role_name') || 'admin');
+  const [activeUserEmail, setActiveUserEmail] = useState(() => localStorage.getItem('auth_user_email') || '');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(null);
 
@@ -42,27 +42,6 @@ export default function App() {
   const [resolvedQuestion, setResolvedQuestion] = useState(null);
   const [activeExecutionData, setActiveExecutionData] = useState(null);
 
-  // Auto-login to obtain active Bearer JWT token on startup if none exists
-  useEffect(() => {
-    if (!localStorage.getItem('access_token')) {
-      fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'admin@trustengine.ai', password: 'AdminPass123!' }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.success) {
-            localStorage.setItem('access_token', data.data.access_token);
-            localStorage.setItem('refresh_token', data.data.refresh_token);
-            localStorage.setItem('auth_role_name', 'admin');
-            localStorage.setItem('auth_role_id', '1');
-            localStorage.setItem('auth_user_email', 'admin@trustengine.ai');
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
 
   useEffect(() => {
     apiFetch('/api/health')
@@ -148,8 +127,8 @@ export default function App() {
                 sql: proposal.sql,
                 policyValidation: policyVal,
                 criticAnalysis: sqlData.data.critic_analysis,
-                reliabilityScore: sqlData.data.reliability_breakdown?.overall_score ?? 92,
-                execution: execData?.data || { success: true, rows: [], columns: [] },
+                reliabilityScore: sqlData.data.reliability_breakdown?.overall_score || null,
+                execution: execData?.data || { success: false, rows: [], columns: [], error: 'No execution result' },
               });
             } else {
               setActiveExecutionData({
@@ -157,7 +136,7 @@ export default function App() {
                 sql: proposal.sql,
                 policyValidation: policyVal,
                 criticAnalysis: sqlData.data.critic_analysis,
-                reliabilityScore: 30,
+                reliabilityScore: sqlData.data.reliability_breakdown?.overall_score || null,
                 execution: { success: false, rows: [], columns: [], error: 'Execution blocked by policy engine' },
               });
             }

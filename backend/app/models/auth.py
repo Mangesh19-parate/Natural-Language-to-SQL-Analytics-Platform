@@ -29,3 +29,14 @@ class User(Base):
     queries = relationship("QueryHistory", back_populates="user")
     reports = relationship("Report", back_populates="user")
     feedbacks = relationship("Feedback", back_populates="user")
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    jti = Column(String(64), unique=True, index=True, nullable=True)
+    token_hash = Column(String(64), unique=True, index=True, nullable=False)
+    revoked_at = Column(DateTime, server_default=func.now())
+    expires_at = Column(DateTime, nullable=True)
+

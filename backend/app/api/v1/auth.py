@@ -83,7 +83,7 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
     """
     Refreshes an access token using a valid refresh token and rotates the refresh token (SEC-REFRESH-ROTATION).
     """
-    payload = AuthService.decode_token(request.refresh_token)
+    payload = AuthService.decode_token(request.refresh_token, db=db)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -91,7 +91,7 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
         )
 
     # Invalidate previous refresh token upon use (Rotation & Revocation)
-    AuthService.revoke_token(request.refresh_token)
+    AuthService.revoke_token(request.refresh_token, db=db)
 
     user_id = payload.get("sub") or payload.get("user_id")
     user = db.query(User).filter(User.user_id == int(user_id)).first()
@@ -129,12 +129,13 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
 def logout(
     token_req: Optional[TokenRefreshRequest] = None,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Explicitly revokes active user session and supplied refresh tokens (SEC-LOGOUT).
     """
     if token_req and token_req.refresh_token:
-        AuthService.revoke_token(token_req.refresh_token)
+        AuthService.revoke_token(token_req.refresh_token, db=db)
     return StandardResponse(
         success=True,
         message="User logged out and session revoked successfully",

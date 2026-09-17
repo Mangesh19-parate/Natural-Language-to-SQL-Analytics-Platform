@@ -9,41 +9,14 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentRole 
   if (!isOpen) return null;
 
   const quickRoles = [
-    { name: 'Admin', roleId: 1, email: 'admin@trustengine.ai', password: 'AdminPass123!', desc: 'Full Schema & Policy Access, EXPLAIN ANALYZE' },
-    { name: 'Analyst', roleId: 2, email: 'analyst@trustengine.ai', password: 'AnalystPass123!', desc: 'Business Tables, Aggregates, No Raw PII' },
-    { name: 'Viewer', roleId: 3, email: 'viewer@trustengine.ai', password: 'ViewerPass123!', desc: 'Fail-Closed Denied by Default' },
+    { name: 'Admin', roleId: 1, email: 'admin@trustengine.ai', desc: 'Full Schema & Policy Access, EXPLAIN ANALYZE' },
+    { name: 'Analyst', roleId: 2, email: 'analyst@trustengine.ai', desc: 'Business Tables, Aggregates, No Raw PII' },
+    { name: 'Viewer', roleId: 3, email: 'viewer@trustengine.ai', desc: 'Fail-Closed Denied by Default' },
   ];
 
-  const handleQuickSwitch = async (role) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: role.email, password: role.password }),
-      });
-      const resData = await res.json();
-      if (resData?.success) {
-        const { access_token, refresh_token, user } = resData.data;
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', refresh_token);
-        localStorage.setItem('auth_role_name', user.role_name || role.name.toLowerCase());
-        localStorage.setItem('auth_role_id', String(user.role_id || role.roleId));
-        localStorage.setItem('auth_user_email', user.email);
-
-        if (onAuthSuccess) {
-          onAuthSuccess(user);
-        }
-        onClose();
-      } else {
-        setError(resData?.detail || 'Quick switch login failed');
-      }
-    } catch (err) {
-      setError(err.message || 'Quick switch failed');
-    } finally {
-      setLoading(false);
-    }
+  const handleRolePresetSelect = (role) => {
+    setEmail(role.email);
+    setPassword('');
   };
 
   const handleLoginSubmit = async (e) => {
@@ -129,7 +102,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentRole 
             {quickRoles.map((qr) => (
               <button
                 key={qr.roleId}
-                onClick={() => handleQuickSwitch(qr)}
+                onClick={() => handleRolePresetSelect(qr)}
                 style={{
                   background: currentRole.toLowerCase() === qr.name.toLowerCase() ? 'rgba(59, 130, 246, 0.2)' : '#0f172a',
                   border: currentRole.toLowerCase() === qr.name.toLowerCase() ? '1px solid #3b82f6' : '1px solid #334155',

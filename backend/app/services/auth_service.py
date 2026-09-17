@@ -30,28 +30,21 @@ class AuthService:
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verifies a plain password against the stored hash securely."""
+        """Verifies a plain password against the stored bcrypt hash securely (Fail-Closed)."""
         if not hashed_password or not plain_password:
             return False
-        # Try passlib bcrypt
         try:
-            if pwd_context.verify(plain_password, hashed_password):
-                return True
+            return pwd_context.verify(plain_password, hashed_password)
         except Exception:
-            pass
-        # Fallback standard SHA256 verification if legacy sha256 format was seeded
-        sha_hash = hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
-        if hashed_password == sha_hash or hashed_password == f"sha256:{sha_hash}":
-            return True
-        return False
+            # Fail closed immediately if hash is malformed or verification fails
+            return False
 
     @staticmethod
     def get_password_hash(password: str) -> str:
-        """Hashes a plain password using bcrypt."""
-        try:
-            return pwd_context.hash(password)
-        except Exception:
-            return hashlib.sha256(password.encode("utf-8")).hexdigest()
+        """Hashes a plain password using bcrypt (Fail-Closed)."""
+        if not password:
+            raise ValueError("Password cannot be empty")
+        return pwd_context.hash(password)
 
     @staticmethod
     def create_access_token(
@@ -84,8 +77,31 @@ class AuthService:
         return encoded_jwt
 
     @staticmethod
-    def decode_token(token: str) -> Optional[Dict[str, Any]]:
-        """Decodes and validates a JWT token signature and expiration."""
+    def is_token_revoked(token: str, jti: Optional[str] = None, db: Optional[Session] = None) -> bool:
+        """Checks if a token or JTI is revoked in fast memory or persistent store."""
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        if (jti and jti in _REVOKED_TOKENS) or token_hash in _REVOKED_TOKENS:
+            return True
+        if db is not None:
+            try:
+                from app.models.auth import RevokedToken
+                query = db.query(RevokedToken)
+                if jti:
+                    match = query.filter((RevokedToken.jti == jti) | (RevokedToken.token_hash == token_hash)).first()
+                else:
+                    match = query.filter(RevokedToken.token_hash == token_hash).first()
+                if match:
+                    if jti:
+                        _REVOKED_TOKENS.add(jti)
+                    _REVOKED_TOKENS.add(token_hash)
+                    return True
+            except Exception:
+                pass
+        return False
+
+    @staticmethod
+    def decode_token(token: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+        """Decodes and validates a JWT token signature, expiration, and revocation status."""
         try:
             payload = jwt.decode(
                 token,
@@ -93,15 +109,18 @@ class AuthService:
                 algorithms=[settings.JWT_ALGORITHM],
             )
             jti = payload.get("jti")
-            if jti and jti in _REVOKED_TOKENS:
+            if AuthService.is_token_revoked(token, jti, db):
                 return None
             return payload
         except JWTError:
             return None
 
     @staticmethod
-    def revoke_token(token: str) -> bool:
-        """Revokes a JWT token by adding its jti or token hash to the revocation set."""
+    def revoke_token(token: str, db: Optional[Session] = None) -> bool:
+        """Revokes a JWT token by adding its jti or token hash to revocation store."""
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        jti = None
+        exp_dt = None
         try:
             payload = jwt.decode(
                 token,
@@ -110,13 +129,29 @@ class AuthService:
                 options={"verify_exp": False}
             )
             jti = payload.get("jti")
-            if jti:
-                _REVOKED_TOKENS.add(jti)
-            _REVOKED_TOKENS.add(hashlib.sha256(token.encode()).hexdigest())
-            return True
+            exp_ts = payload.get("exp")
+            if exp_ts:
+                exp_dt = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
         except Exception:
-            _REVOKED_TOKENS.add(hashlib.sha256(token.encode()).hexdigest())
-            return True
+            pass
+
+        if jti:
+            _REVOKED_TOKENS.add(jti)
+        _REVOKED_TOKENS.add(token_hash)
+
+        if db is not None:
+            try:
+                from app.models.auth import RevokedToken
+                revoked_entry = RevokedToken(
+                    jti=jti,
+                    token_hash=token_hash,
+                    expires_at=exp_dt,
+                )
+                db.add(revoked_entry)
+                db.commit()
+            except Exception:
+                db.rollback()
+        return True
 
 
 def get_current_user_optional(
@@ -127,7 +162,7 @@ def get_current_user_optional(
     if not credentials or not credentials.credentials:
         return None
 
-    payload = AuthService.decode_token(credentials.credentials)
+    payload = AuthService.decode_token(credentials.credentials, db=db)
     if not payload:
         return None
 
@@ -137,6 +172,7 @@ def get_current_user_optional(
 
     user = db.query(User).filter(User.user_id == int(user_id)).first()
     return user
+
 
 
 def get_current_user(
@@ -151,7 +187,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = AuthService.decode_token(credentials.credentials)
+    payload = AuthService.decode_token(credentials.credentials, db=db)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

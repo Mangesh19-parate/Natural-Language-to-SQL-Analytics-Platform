@@ -8,12 +8,12 @@ export default function EvidenceChainPanel({
   resultValidation = null,
   reliabilityScore = null,
 }) {
-  const isAllowed = policyValidation?.is_allowed ?? true;
-  const executionSuccess = queryResult?.execution?.success ?? true;
-  const reliability = reliabilityScore ?? queryResult?.reliability?.overall_score ?? 92;
+  const isAllowed = policyValidation ? Boolean(policyValidation.is_allowed) : false;
+  const executionSuccess = queryResult?.execution ? Boolean(queryResult.execution.success) : false;
+  const reliability = reliabilityScore ?? queryResult?.reliability?.overall_score ?? null;
 
   const reliabilityVariant =
-    reliability >= 85 ? 'success' : reliability >= 60 ? 'warning' : 'danger';
+    reliability === null ? 'neutral' : reliability >= 85 ? 'success' : reliability >= 60 ? 'warning' : 'danger';
 
   return (
     <div
@@ -50,11 +50,15 @@ export default function EvidenceChainPanel({
               Composite Reliability
             </div>
             <div style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-              {reliability}<span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>/100</span>
+              {reliability !== null ? (
+                <>{reliability}<span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>/100</span></>
+              ) : (
+                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Pending</span>
+              )}
             </div>
           </div>
           <Badge variant={reliabilityVariant} size="md">
-            {reliability >= 85 ? 'High Confidence' : reliability >= 60 ? 'Moderate' : 'Low Confidence'}
+            {reliability === null ? 'Pending' : reliability >= 85 ? 'High Confidence' : reliability >= 60 ? 'Moderate' : 'Low Confidence'}
           </Badge>
         </div>
       </div>
