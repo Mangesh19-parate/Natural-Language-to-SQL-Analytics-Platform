@@ -16,7 +16,7 @@ router = APIRouter(prefix="/intent", tags=["Intent Analysis & Ambiguity"])
 
 
 @router.post("/classify", response_model=StandardResponse[IntentAnalysisResult])
-async def classify_intent(
+def classify_intent(
     request: IntentClassifyRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -51,7 +51,7 @@ async def classify_intent(
 
 
 @router.post("/resolve", response_model=StandardResponse[str])
-async def resolve_intent(request: IntentResolveRequest):
+def resolve_intent(request: IntentResolveRequest):
     """
     POST /api/intent/resolve — Resolves ambiguous option selection into a concrete question.
     """

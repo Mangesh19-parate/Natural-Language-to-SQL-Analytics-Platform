@@ -57,7 +57,7 @@ async def generate_sql_proposal(
 
 
 @router.post("/validate", response_model=SQLValidateResponse)
-async def validate_sql(
+def validate_sql(
     request: SQLValidateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -91,7 +91,7 @@ async def validate_sql(
 
 
 @router.post("/critic", response_model=SQLCriticResponse)
-async def critique_sql_endpoint(
+def critique_sql_endpoint(
     request: SQLCriticRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -119,7 +119,7 @@ async def critique_sql_endpoint(
 
 
 @router.post("/correct", response_model=SelfCorrectionResult)
-async def self_correct_sql(
+def self_correct_sql(
     request: SelfCorrectionRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -142,7 +142,7 @@ async def self_correct_sql(
 
 
 @router.post("/validate-results", response_model=ResultValidationReport)
-async def validate_query_results(
+def validate_query_results(
     request: ResultValidationRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -206,7 +206,7 @@ def _persist_query_reliability(
 
 
 @router.post("/execute", response_model=SQLExecuteResponse)
-async def execute_sandboxed_sql(
+def execute_sandboxed_sql(
     request: SQLExecuteRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

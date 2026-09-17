@@ -21,6 +21,8 @@ from app.services.auth_service import (
     AuthService,
     get_current_user,
     require_roles,
+    security_scheme,
+    HTTPAuthorizationCredentials,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & RBAC"])
@@ -128,18 +130,21 @@ def refresh_token(request: TokenRefreshRequest, db: Session = Depends(get_db)):
 @router.post("/logout", response_model=StandardResponse[Dict[str, str]])
 def logout(
     token_req: Optional[TokenRefreshRequest] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Explicitly revokes active user session and supplied refresh tokens (SEC-LOGOUT).
+    Explicitly revokes active user session access token and supplied refresh tokens (SEC-LOGOUT).
     """
+    if credentials and credentials.credentials:
+        AuthService.revoke_token(credentials.credentials, db=db)
     if token_req and token_req.refresh_token:
         AuthService.revoke_token(token_req.refresh_token, db=db)
     return StandardResponse(
         success=True,
-        message="User logged out and session revoked successfully",
-        data={"status": "revoked"},
+        message="Session revoked and logged out successfully",
+        data={"user_id": str(current_user.user_id)},
     )
 
 

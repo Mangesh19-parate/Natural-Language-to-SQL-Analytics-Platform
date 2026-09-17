@@ -16,7 +16,7 @@ router = APIRouter(prefix="/lab", tags=["Security & Evaluation Labs"])
 
 
 @router.post("/security/run", response_model=SecurityAttackRunResponse)
-async def run_security_attack_suite(
+def run_security_attack_suite(
     request: SecurityAttackRunRequest,
     current_user: User = Depends(require_roles(["admin"])),
     db: Session = Depends(get_db),
@@ -36,7 +36,7 @@ async def run_security_attack_suite(
 
 
 @router.get("/security/latest", response_model=SecurityAttackRunResponse)
-async def get_latest_security_attack_run(
+def get_latest_security_attack_run(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -68,7 +68,7 @@ async def run_evaluation_benchmark(
 
 
 @router.get("/evaluation/latest", response_model=EvaluationBenchmarkResponse)
-async def get_latest_evaluation_benchmark(
+def get_latest_evaluation_benchmark(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

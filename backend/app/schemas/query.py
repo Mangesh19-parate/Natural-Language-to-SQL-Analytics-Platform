@@ -46,9 +46,9 @@ class SQLProposal(BaseModel):
 
 
 class SQLGenerateRequest(BaseModel):
-    question: str
-    data_source_id: int = 1
-    role_id: int = 4  # Default to viewer/analyst role
+    question: str = Field(..., min_length=1, max_length=2000)
+    data_source_id: int = Field(default=1, ge=1)
+    role_id: int = Field(default=4, ge=1)  # Default to viewer/analyst role
     session_id: Optional[str] = None
     clarifications: Optional[Dict[str, Any]] = None
 
@@ -64,9 +64,9 @@ class SQLGenerateResponse(BaseModel):
 
 
 class SQLValidateRequest(BaseModel):
-    sql: str
-    data_source_id: int = 1
-    role_id: int = 4
+    sql: str = Field(..., min_length=1, max_length=20000)
+    data_source_id: int = Field(default=1, ge=1)
+    role_id: int = Field(default=4, ge=1)
 
 
 class SQLValidateResponse(BaseModel):
@@ -77,9 +77,9 @@ class SQLValidateResponse(BaseModel):
 
 
 class SQLCriticRequest(BaseModel):
-    sql: str
-    data_source_id: int = 1
-    role_id: int = 1
+    sql: str = Field(..., min_length=1, max_length=20000)
+    data_source_id: int = Field(default=1, ge=1)
+    role_id: int = Field(default=1, ge=1)
     query_id: Optional[str] = None
 
 
@@ -109,13 +109,13 @@ class CorrectionAttempt(BaseModel):
 
 
 class SelfCorrectionRequest(BaseModel):
-    original_question: str
-    failing_sql: str
+    original_question: str = Field(..., min_length=1, max_length=2000)
+    failing_sql: str = Field(..., min_length=1, max_length=20000)
     error_message: str
-    data_source_id: int = 1
-    role_id: int = 4
+    data_source_id: int = Field(default=1, ge=1)
+    role_id: int = Field(default=4, ge=1)
     query_id: Optional[str] = None
-    max_retries: int = 3
+    max_retries: int = Field(default=3, ge=1, le=5)
 
 
 class SelfCorrectionResult(BaseModel):
@@ -150,22 +150,22 @@ class ResultValidationReport(BaseModel):
 
 
 class ResultValidationRequest(BaseModel):
-    sql: str
+    sql: str = Field(..., min_length=1, max_length=20000)
     columns: List[str] = Field(default_factory=list)
     rows: List[Dict[str, Any]] = Field(default_factory=list)
-    row_count: int = 0
-    data_source_id: int = 1
+    row_count: int = Field(default=0, ge=0)
+    data_source_id: int = Field(default=1, ge=1)
     query_id: Optional[str] = None
 
 
 class SQLExecuteRequest(BaseModel):
-    sql: str
-    data_source_id: int = 1
-    role_id: int = 4
-    timeout_seconds: float = 10.0
-    max_rows: int = 10000
+    sql: str = Field(..., min_length=1, max_length=20000)
+    data_source_id: int = Field(default=1, ge=1)
+    role_id: int = Field(default=4, ge=1)
+    timeout_seconds: float = Field(default=10.0, ge=0.5, le=30.0)
+    max_rows: int = Field(default=1000, ge=1, le=10000)
     auto_correct: bool = True
-    question: Optional[str] = None
+    question: Optional[str] = Field(default=None, max_length=2000)
     query_id: Optional[str] = None
 
 
