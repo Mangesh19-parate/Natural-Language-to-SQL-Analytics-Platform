@@ -199,7 +199,8 @@ body {
 }
 
 /* Buttons */
-.ui-btn {
+.ui-btn,
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -214,32 +215,38 @@ body {
   font-family: var(--font-sans);
 }
 
-.ui-btn-primary {
+.ui-btn-primary,
+.btn-primary {
   background: var(--bg-accent);
   color: #fff;
 }
 
-.ui-btn-primary:hover {
+.ui-btn-primary:hover,
+.btn-primary:hover {
   background: var(--bg-accent-hover);
 }
 
-.ui-btn-secondary {
+.ui-btn-secondary,
+.btn-secondary {
   background: var(--bg-subtle);
   color: var(--text-primary);
   border-color: var(--border-base);
 }
 
-.ui-btn-secondary:hover {
+.ui-btn-secondary:hover,
+.btn-secondary:hover {
   background: var(--bg-card-hover);
 }
 
-.ui-btn-danger {
+.ui-btn-danger,
+.btn-danger {
   background: var(--color-danger-bg);
   color: var(--color-danger);
   border-color: var(--color-danger-border);
 }
 
-.ui-btn-danger:hover {
+.ui-btn-danger:hover,
+.btn-danger:hover {
   background: rgba(239, 68, 68, 0.2);
 }
 
