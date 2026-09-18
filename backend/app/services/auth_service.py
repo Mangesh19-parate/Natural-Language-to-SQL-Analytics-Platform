@@ -77,28 +77,34 @@ class AuthService:
         return encoded_jwt
 
     @staticmethod
-    def is_token_revoked(token: str, jti: Optional[str] = None, db: Optional[Session] = None) -> bool:
-        """Checks if a token or JTI is revoked in fast memory, Redis cluster, or persistent store."""
+    def is_token_revoked(token: str, jti: Optional[str] = None, db: Optional[Session] = None, fail_closed: bool = True) -> bool:
+        """Checks if a token or JTI is revoked in fast memory, Redis cluster, or persistent store.
+        If fail_closed is True and all persistent revocation backends fail unexpectedly, denies authorization."""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         
         # 1. Fast in-memory process cache check
         if (jti and jti in _REVOKED_TOKENS) or token_hash in _REVOKED_TOKENS:
             return True
 
+        redis_checked = False
+        redis_error = False
         # 2. Redis Distributed Cache check
         try:
             from app.core.redis_client import RedisService
             redis_svc = RedisService.get_instance()
             if redis_svc.is_available:
+                redis_checked = True
                 if redis_svc.is_token_revoked(jti, token_hash):
                     if jti:
                         _REVOKED_TOKENS.add(jti)
                     _REVOKED_TOKENS.add(token_hash)
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            redis_error = True
+            logger.warning(f"Redis revocation check failed: {e}")
 
         # 3. Persistent Database store fallback
+        db_error = False
         if db is not None:
             try:
                 from app.models.auth import RevokedToken
@@ -112,8 +118,15 @@ class AuthService:
                         _REVOKED_TOKENS.add(jti)
                     _REVOKED_TOKENS.add(token_hash)
                     return True
-            except Exception:
-                pass
+            except Exception as e:
+                db_error = True
+                logger.error(f"Database revocation check failed with error: {e}")
+
+        # Fail-closed invariant: If DB query errored and Redis was unavailable/errored, fail-closed
+        if db_error and (not redis_checked or redis_error) and fail_closed:
+            logger.critical("Fail-closed security check: Token revocation store unreachable, rejecting token.")
+            return True
+
         return False
 
     @staticmethod

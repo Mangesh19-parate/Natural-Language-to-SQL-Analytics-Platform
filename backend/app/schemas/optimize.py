@@ -91,6 +91,11 @@ class ExecutionBenchmarkResult(BaseModel):
     results_equivalent: bool
     row_count: int
     validation_status: str
+    trials_run: int = 5
+    original_p95_ms: Optional[float] = None
+    optimized_p95_ms: Optional[float] = None
+    original_min_ms: Optional[float] = None
+    optimized_min_ms: Optional[float] = None
 
 
 class JoinPlanRequest(BaseModel):

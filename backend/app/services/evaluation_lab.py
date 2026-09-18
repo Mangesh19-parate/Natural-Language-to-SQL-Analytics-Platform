@@ -281,13 +281,25 @@ class EvaluationLabService:
             return Counter(cand_tuples) == Counter(ref_tuples)
 
         # 2. Canonical alias alignment (e.g. total_revenue vs revenue or cnt vs employee_count)
-        # Disallow arbitrary positional comparison if column counts or inferred semantic roles differ
         if len(cand_keys) == len(ref_keys):
-            # Check if column names share common root or single-column scalar projection
+            # For single-column scalar projections (aggregations or alias variations),
+            # check if names share common stems or typical metric suffixes/prefixes,
+            # or if both are aggregate/scalar metrics.
             if len(cand_keys) == 1:
-                cand_tuples = [tuple(normalize_val(v) for v in r.values()) for r in candidate_rows]
-                ref_tuples = [tuple(normalize_val(v) for v in r.values()) for r in reference_rows]
-                return Counter(cand_tuples) == Counter(ref_tuples)
+                ck, rk = cand_keys[0], ref_keys[0]
+                common_roots = {"count", "cnt", "sum", "total", "avg", "mean", "min", "max", "amount", "revenue", "sales", "val", "result", "num", "pct", "rate"}
+                is_semantic_match = (
+                    ck == rk
+                    or any(root in ck and root in rk for root in common_roots)
+                    or (any(root in ck for root in common_roots) and any(root in rk for root in common_roots))
+                    or ck.replace("_", "") == rk.replace("_", "")
+                )
+                if is_semantic_match or ck.startswith(rk) or rk.startswith(ck):
+                    cand_tuples = [tuple(normalize_val(v) for v in r.values()) for r in candidate_rows]
+                    ref_tuples = [tuple(normalize_val(v) for v in r.values()) for r in reference_rows]
+                    return Counter(cand_tuples) == Counter(ref_tuples)
+                # If column names are completely unrelated entities (e.g., 'city' vs 'salary'), reject comparison
+                return False
 
             # For multi-column projections, require at least one shared column key or known alias derivation
             shared_keys = set(cand_keys).intersection(set(ref_keys))
@@ -541,8 +553,8 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             safety_violation=safety_violation,
             unauthorized_exposure=unauthorized_exposure,
             error_type=error_type,
-            latency_ms=max(latency_ms, 8),
-            reliability_score=rel_score or (90 if result_correct else 30),
+            latency_ms=latency_ms,
+            reliability_score=rel_score,
         )
 
     @classmethod
@@ -812,7 +824,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     safety_violation=bool(r.safety_violation),
                     unauthorized_exposure=bool(r.unauthorized_exposure),
                     error_type=r.error_type,
-                    latency_ms=r.latency_ms or 10,
+                    latency_ms=r.latency_ms if r.latency_ms is not None else 0.0,
                 )
             )
 
