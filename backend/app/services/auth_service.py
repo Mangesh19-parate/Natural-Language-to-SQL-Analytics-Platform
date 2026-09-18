@@ -1,5 +1,6 @@
 import os
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from jose import JWTError, jwt
@@ -12,6 +13,8 @@ from app.config import settings
 from app.db.session import get_db
 from app.models.auth import User, Role
 from app.schemas.auth import TokenData, UserOut
+
+logger = logging.getLogger(__name__)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -314,5 +317,33 @@ def authorize_resource_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Access denied: You do not have permission to {action} this {resource_type}.",
         )
+
+
+def authorize_query_access(
+    db: Session,
+    current_user: User,
+    query_id: str,
+    action: str = "access",
+) -> Any:
+    """
+    Centralized Query Resource Ownership Check (SEC-QUERY-OWNERSHIP).
+    Fetches the QueryHistory record by query_id and enforces that the current user owns it (or is admin).
+    Raises HTTP 404 if not found, and HTTP 403 if unauthorized.
+    """
+    from app.models.session import QueryHistory
+    q_row = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+    if not q_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Query history record with id '{query_id}' not found.",
+        )
+    authorize_resource_access(
+        resource_owner_id=q_row.user_id,
+        current_user=current_user,
+        resource_type="query history record",
+        action=action,
+    )
+    return q_row
+
 
 

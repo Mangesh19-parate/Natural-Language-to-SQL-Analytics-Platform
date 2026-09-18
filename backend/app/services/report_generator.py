@@ -204,17 +204,28 @@ class ReportGeneratorService:
 
             # Reliability Score Breakdown (Rule R8.3 & REQ-TRUST-01)
             rel = item.reliability_breakdown or {}
-            composite = rel.get("composite_score", 1.0)
-            score_pct = f"{float(composite) * 100:.1f}%" if isinstance(composite, (int, float)) else str(composite)
+            composite = rel.get("composite_score") or rel.get("composite")
+            if composite is not None and isinstance(composite, (int, float)):
+                score_pct = f"{float(composite) * 100:.1f}%" if float(composite) <= 1.0 else f"{float(composite):.1f}%"
+            elif composite is not None:
+                score_pct = str(composite)
+            else:
+                score_pct = "N/A"
+
             subscores = rel.get("sub_scores", {})
+            def fmt_sub(key: str) -> str:
+                v = subscores.get(key)
+                if v is None:
+                    return "N/A"
+                return f"{float(v)*100:.0f}%" if float(v) <= 1.0 else f"{float(v):.0f}%"
 
             rel_data = [
                 ["Reliability Dimension", "Sub-Score", "Weight", "Evidence Trace"],
-                ["Schema Grounding", f"{subscores.get('schema_grounding', 1.0)*100:.0f}%", "25%", "Catalog lookup & foreign key binding"],
-                ["Join Confidence", f"{subscores.get('join_confidence', 1.0)*100:.0f}%", "20%", "FK relationship graph validation"],
-                ["Filter Interpretation", f"{subscores.get('filter_interpretation', 1.0)*100:.0f}%", "15%", "Sanitized literal value grounding"],
-                ["Execution Validation", f"{subscores.get('execution_validation', 1.0)*100:.0f}%", "25%", "Zero-error sandbox execution"],
-                ["Result Sanity", f"{subscores.get('result_sanity', 1.0)*100:.0f}%", "15%", "Cardinality & non-empty result checks"],
+                ["Schema Grounding", fmt_sub('schema_grounding'), "25%", "Catalog lookup & foreign key binding"],
+                ["Join Confidence", fmt_sub('join_confidence'), "20%", "FK relationship graph validation"],
+                ["Filter Interpretation", fmt_sub('filter_interpretation'), "15%", "Sanitized literal value grounding"],
+                ["Execution Validation", fmt_sub('execution_validation'), "25%", "Zero-error sandbox execution"],
+                ["Result Sanity", fmt_sub('result_sanity'), "15%", "Cardinality & non-empty result checks"],
                 ["<b>Composite Trust Score</b>", f"<b>{score_pct}</b>", "<b>100%</b>", f"Status: <b>{item.status.upper()}</b>"]
             ]
             rel_table = Table(rel_data, colWidths=[140, 75, 55, 270])
@@ -347,8 +358,13 @@ class ReportGeneratorService:
         for q_idx, q in enumerate(request.queries, start=1):
             curr_row = start_q_row + q_idx
             rel = q.reliability_breakdown or {}
-            comp = rel.get("composite_score", 1.0)
-            score_str = f"{float(comp)*100:.1f}%" if isinstance(comp, (int, float)) else str(comp)
+            comp = rel.get("composite_score") or rel.get("composite")
+            if comp is not None and isinstance(comp, (int, float)):
+                score_str = f"{float(comp)*100:.1f}%" if float(comp) <= 1.0 else f"{float(comp):.1f}%"
+            elif comp is not None:
+                score_str = str(comp)
+            else:
+                score_str = "N/A"
             
             ws_summary.append([
                 q_idx,

@@ -28,15 +28,33 @@ class DistributedRateLimitMiddleware(BaseHTTPMiddleware):
         if os.environ.get("TESTING") == "true" or "PYTEST_CURRENT_TEST" in os.environ or request.headers.get("X-Test-Bypass-RateLimit"):
             return await call_next(request)
 
-        # Extract client identifier: Authorization bearer token user or client IP
+        # Extract client identifier: Server-resolved User ID or Trusted Client IP
+        identifier = None
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            identifier = f"user:{auth_header[7:25]}"
-        else:
-            client_ip = request.client.host if request.client else "unknown_ip"
+            raw_tok = auth_header[7:].strip()
+            try:
+                from jose import jwt
+                # Extract subject/user_id from unverified claims for rate limit keying
+                claims = jwt.get_unverified_claims(raw_tok)
+                uid = claims.get("user_id") or claims.get("sub")
+                if uid:
+                    identifier = f"user:{uid}"
+            except Exception:
+                pass
+            if not identifier:
+                # Fallback to deterministic SHA-256 token fingerprint
+                import hashlib
+                identifier = f"tok:{hashlib.sha256(raw_tok.encode()).hexdigest()[:16]}"
+
+        if not identifier:
+            socket_ip = request.client.host if request.client else "127.0.0.1"
+            # Only trust X-Forwarded-For when incoming from local reverse proxy
             forwarded_for = request.headers.get("X-Forwarded-For")
-            if forwarded_for:
+            if forwarded_for and socket_ip in ["127.0.0.1", "::1", "localhost", "10.0.0.1"]:
                 client_ip = forwarded_for.split(",")[0].strip()
+            else:
+                client_ip = socket_ip
             identifier = f"ip:{client_ip}"
 
         is_allowed, remaining, reset_seconds = self.redis_service.check_rate_limit(

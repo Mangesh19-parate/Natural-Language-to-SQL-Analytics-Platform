@@ -217,7 +217,7 @@ def list_roles(db: Session = Depends(get_db)):
 @router.get("/users", response_model=StandardResponse[List[UserOut]])
 def list_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin"])),
 ):
     """
     Lists all users in the system.

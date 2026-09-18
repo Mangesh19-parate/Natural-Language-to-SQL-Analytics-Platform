@@ -19,7 +19,8 @@ from app.schemas.query import (
     ResultValidationReport,
     ErrorTaxonomyType,
 )
-from app.services.auth_service import get_current_user, get_effective_role_id
+from app.services.auth_service import get_current_user, get_effective_role_id, authorize_query_access
+from app.services.data_source_manager import DataSourceManager
 from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
@@ -151,7 +152,13 @@ def validate_query_results(
 ):
     """
     Runs Result Sanity Validator (zero-row, cardinality, null-explosion, join-multiplication).
+    Enforces query ownership if query_id is provided.
     """
+    if request.query_id:
+        existing_q = db.query(QueryHistory).filter(QueryHistory.query_id == request.query_id).first()
+        if existing_q and existing_q.user_id:
+            authorize_query_access(db, current_user, request.query_id, action="validate-results")
+
     report = ResultValidatorService.validate_results(
         db=db,
         sql=request.sql,
@@ -218,9 +225,15 @@ def execute_sandboxed_sql(
     ONLY IF it passes all deterministic Policy Engine gates (Rule R1.1-R1.6),
     with post-execution Result Validation (REQ-RESULT-01), optional Self-Correction,
     deterministic Reliability Scoring (REQ-TRUST-01 / Rule R3.3), and Chart Spec generation (REQ-VIS-01).
-    Strictly derives effective role from authenticated session.
+    Strictly derives effective role from authenticated session and enforces query ownership.
     """
+    if request.query_id:
+        existing_q = db.query(QueryHistory).filter(QueryHistory.query_id == request.query_id).first()
+        if existing_q and existing_q.user_id:
+            authorize_query_access(db, current_user, request.query_id, action="execute/update")
+
     effective_role_id = get_effective_role_id(current_user, request.role_id)
+    target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
 
     policy_res = PolicyEngine.validate_sql(
         db=db,
@@ -274,7 +287,7 @@ def execute_sandboxed_sql(
     # Pre-execution Cost-Based Join Planning & Admission Gating (Principle R2)
     opt_res = CostBasedJoinOptimizer.optimize_query(
         sql=execution_sql,
-        engine=business_engine,
+        engine=target_engine,
         data_source_id=request.data_source_id,
     )
 
@@ -316,7 +329,7 @@ def execute_sandboxed_sql(
     final_execution_sql = opt_res.optimized_sql if (opt_res.optimized_sql and opt_res.gate_decision == GateDecisionEnum.ALLOW) else execution_sql
 
     sandbox_res = ExecutionSandboxService.execute_query(
-        engine=business_engine,
+        engine=target_engine,
         sql=final_execution_sql,
         timeout_seconds=request.timeout_seconds,
         max_rows=request.max_rows,
@@ -388,7 +401,7 @@ def execute_sandboxed_sql(
         if correction_res.recovered:
             # Re-execute repaired SQL
             repaired_exec = ExecutionSandboxService.execute_query(
-                engine=business_engine,
+                engine=target_engine,
                 sql=correction_res.final_sql,
                 timeout_seconds=request.timeout_seconds,
                 max_rows=request.max_rows,

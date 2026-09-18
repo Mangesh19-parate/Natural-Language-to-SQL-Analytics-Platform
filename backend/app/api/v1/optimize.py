@@ -16,7 +16,8 @@ from app.schemas.optimize import (
     JoinPlanRequest,
     JoinPlanResponse,
 )
-from app.services.auth_service import get_current_user, require_roles, authorize_resource_access
+from app.services.auth_service import get_current_user, require_roles, authorize_resource_access, authorize_query_access
+from app.services.data_source_manager import DataSourceManager
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
 from app.services.optimizer import QueryOptimizerService
@@ -57,9 +58,10 @@ def optimize_explain(
 
     try:
         exec_sql = policy_res.injected_sql or request.sql
-        plan_raw, plan_summary = QueryOptimizerService.run_explain(business_engine, exec_sql)
+        engine = DataSourceManager.get_engine(db, data_source_id=1)
+        plan_raw, plan_summary = QueryOptimizerService.run_explain(engine, exec_sql)
         suggestions = QueryOptimizerService.generate_suggestions(
-            business_engine,
+            engine,
             exec_sql,
             plan_raw,
             plan_summary,
@@ -150,15 +152,16 @@ def optimize_analyze(
 
     try:
         exec_sql = injected_sql or request.sql
+        engine = DataSourceManager.get_engine(db, data_source_id=1, admin=True)
         plan_raw, plan_summary, exec_stats = QueryOptimizerService.run_explain_analyze(
-            business_engine,
+            engine,
             exec_sql,
             role="admin",
             timeout_seconds=10.0,
         )
 
         suggestions = QueryOptimizerService.generate_suggestions(
-            business_engine,
+            engine,
             request.sql,
             plan_raw,
             plan_summary,
@@ -220,9 +223,7 @@ def get_query_optimizations(
     Retrieves stored optimization suggestions for a given query history record.
     Enforces resource ownership access control.
     """
-    query_record = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
-    if query_record:
-        authorize_resource_access(query_record.user_id, current_user, "optimization record", "view")
+    authorize_query_access(db, current_user, query_id, action="view optimizations")
 
     records = db.query(OptimizationSuggestion).filter(OptimizationSuggestion.query_id == query_id).all()
     return {
@@ -273,9 +274,11 @@ def optimize_join_plan(
         )
 
     exec_sql = policy_res.injected_sql or request.sql
+    target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
     plan_response = CostBasedJoinOptimizer.optimize_query(
         sql=exec_sql,
-        engine=business_engine,
+        engine=target_engine,
+        data_source_id=request.data_source_id,
         max_allowed_cost=request.max_allowed_cost,
         strict_admission=request.strict_admission,
         benchmark=request.benchmark,

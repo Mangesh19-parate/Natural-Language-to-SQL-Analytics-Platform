@@ -15,7 +15,8 @@ from app.schemas.history import (
 )
 from app.schemas.query import SQLExecuteResponse
 from app.schemas.common import StandardResponse
-from app.services.auth_service import get_current_user, get_effective_role_id
+from app.services.auth_service import get_current_user, get_effective_role_id, authorize_query_access
+from app.services.data_source_manager import DataSourceManager
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
 from app.services.sql_critic import SQLCriticService
@@ -105,21 +106,9 @@ def get_query_history_detail(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieves full execution audit details for a specific query run.
+    Retrieves full execution audit details for a specific query run with strict IDOR ownership authorization.
     """
-    item = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Query history record {query_id} not found",
-        )
-
-    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
-    if item.user_id and item.user_id != current_user.user_id and user_role_name != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. You are not authorized to view this query history detail.",
-        )
+    item = authorize_query_access(db, current_user, query_id, action="view")
 
     critic_findings = (
         db.query(SqlCriticFinding).filter(SqlCriticFinding.query_id == query_id).all()
@@ -186,14 +175,9 @@ def rerun_historical_query(
     """
     Reruns a historical query LIVE against current database and policies (REQ-HIST-01).
     Enforces 'Rerun-by-Default' principle: never returns stale cached results.
-    Strictly derives authorization role from current_user.
+    Strictly enforces query ownership and derives authorization role from current_user.
     """
-    item = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Query history record {query_id} not found",
-        )
+    item = authorize_query_access(db, current_user, query_id, action="rerun")
 
     sql_to_run = item.final_sql or item.initial_sql
     if not sql_to_run:
@@ -249,9 +233,12 @@ def rerun_historical_query(
         sql=exec_sql,
     )
 
+    # Resolve target engine dynamically via DataSourceManager
+    exec_engine = DataSourceManager.get_engine(db, data_source_id=rerun_req.data_source_id)
+
     # Execute sandbox
     sandbox_res = ExecutionSandboxService.execute_query(
-        engine=business_engine,
+        engine=exec_engine,
         sql=exec_sql,
         timeout_seconds=rerun_req.timeout_seconds,
         max_rows=rerun_req.max_rows,
@@ -339,17 +326,13 @@ def rerun_historical_query(
 @router.delete("/{query_id}", response_model=StandardResponse[dict])
 def delete_query_history(
     query_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Deletes a query history entry.
+    Deletes a query history entry strictly verified against caller ownership.
     """
-    item = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Query history record {query_id} not found",
-        )
+    item = authorize_query_access(db, current_user, query_id, action="delete")
 
     db.delete(item)
     db.commit()
@@ -359,3 +342,4 @@ def delete_query_history(
         message=f"Query history record {query_id} deleted successfully",
         data={"deleted_query_id": query_id},
     )
+

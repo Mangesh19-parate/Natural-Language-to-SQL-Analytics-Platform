@@ -740,20 +740,35 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             }
 
         d_items_overall = [r for r in results if r.baseline_variant in [BaselineVariantType.D_PROPOSED, BaselineVariantType.D_POLICY_ENGINE, BaselineVariantType.G_FULL_TRUST_ENGINE]]
-        d_safety_viol_overall = round((sum(1 for it in d_items_overall if it.safety_violation) / max(len(d_items_overall), 1)) * 100.0, 2)
+        d_sec_items = [it for it in d_items_overall if it.question_id in security_qids]
+        d_adversarial_safety_viol = round((sum(1 for it in d_sec_items if it.safety_violation) / max(len(d_sec_items), 1)) * 100.0, 2)
+        d_micro_correct = sum(1 for it in d_items_overall if it.result_correct)
+        d_micro_accuracy = round((d_micro_correct / max(len(d_items_overall), 1)) * 100.0, 1)
+        d_macro_category_avg = round(sum(r.baseline_d_success for r in category_rows) / max(len(category_rows), 1), 1) if category_rows else 0.0
+        d_exec_validity = round((sum(1 for it in d_items_overall if it.execution_success) / max(len(d_items_overall), 1)) * 100.0, 1)
 
         overall_metrics = {
             "research_hypothesis": "Can execution feedback and deterministic policy enforcement improve reliability and safety compared with conventional schema-prompted generation?",
+            "suite_taxonomy": {
+                "total_cases": len(all_questions),
+                "executable_ground_truth_cases": len(ground_truth_qids),
+                "behavioral_safety_cases": len(security_qids),
+                "ambiguous_intent_cases": len(ambiguous_qids),
+            },
             "total_benchmark_cases": len(all_questions),
             "executable_ground_truth_cases": len(ground_truth_qids),
             "security_adversarial_cases": len(security_qids),
             "ambiguous_intent_cases": len(ambiguous_qids),
             "baseline_comparison": variant_stats,
+            "micro_question_accuracy_pct": d_micro_accuracy,
+            "macro_category_avg_pct": d_macro_category_avg,
+            "execution_validity_rate_pct": d_exec_validity,
+            "adversarial_safety_violation_rate_pct": d_adversarial_safety_viol,
             "baseline_a_overall_success": round(sum(r.baseline_a_success for r in category_rows) / max(len(category_rows), 1), 1) if category_rows else 0.0,
             "baseline_b_overall_success": round(sum(r.baseline_b_success for r in category_rows) / max(len(category_rows), 1), 1) if category_rows else 0.0,
             "baseline_c_overall_success": round(sum(r.baseline_c_success for r in category_rows) / max(len(category_rows), 1), 1) if category_rows else 0.0,
-            "baseline_d_overall_success": round(sum(r.baseline_d_success for r in category_rows) / max(len(category_rows), 1), 1) if category_rows else 0.0,
-            "baseline_d_overall_safety_violation_rate": d_safety_viol_overall,
+            "baseline_d_overall_success": d_macro_category_avg,
+            "baseline_d_overall_safety_violation_rate": d_adversarial_safety_viol,
         }
 
         return EvaluationBenchmarkResponse(
