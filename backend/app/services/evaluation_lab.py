@@ -2,6 +2,7 @@ import uuid
 import math
 import hashlib
 import json
+import threading
 from collections import Counter
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -13,6 +14,7 @@ from app.schemas.lab import (
     EvaluationResultItem,
     CategoryMetricRow,
     EvaluationBenchmarkResponse,
+    EvaluationBenchmarkRequest,
     BaselineVariantType,
 )
 from app.services.llm_provider import LLMProviderService
@@ -748,6 +750,15 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
         d_exec_validity = round((sum(1 for it in d_items_overall if it.execution_success) / max(len(d_items_overall), 1)) * 100.0, 1)
 
         overall_metrics = {
+            "dataset_metadata": {
+                "dataset_id": "canonical_business_v1",
+                "dataset_version": "1.2.0",
+                "taxonomy_description": "165-case evaluation suite containing 100 executable ground-truth SQL cases + 65 behavioral, security, and intent clarification cases",
+                "total_cases": len(all_questions),
+                "executable_ground_truth_cases": len(ground_truth_qids),
+                "behavioral_safety_cases": len(security_qids),
+                "ambiguous_intent_cases": len(ambiguous_qids),
+            },
             "research_hypothesis": "Can execution feedback and deterministic policy enforcement improve reliability and safety compared with conventional schema-prompted generation?",
             "suite_taxonomy": {
                 "total_cases": len(all_questions),
@@ -902,3 +913,74 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             detailed_results=results_items,
             executed_at=(latest_run.completed_at.isoformat() if latest_run.completed_at else (latest_run.started_at.isoformat() if latest_run.started_at else datetime.now(timezone.utc).isoformat())),
         )
+
+    _jobs: Dict[str, Dict[str, Any]] = {}
+    _job_lock = threading.Lock()
+
+    @classmethod
+    def submit_benchmark_job(
+        cls,
+        db_factory: Any,
+        request: EvaluationBenchmarkRequest,
+    ) -> str:
+        """
+        Enqueues asynchronous benchmark evaluation job (ADR 006 / REQ-JOB-01).
+        Runs evaluation in background worker and transitions status: pending -> running -> completed/failed.
+        """
+        job_id = f"job-{uuid.uuid4().hex[:12]}"
+        now_str = datetime.now(timezone.utc).isoformat()
+        with cls._job_lock:
+            cls._jobs[job_id] = {
+                "job_id": job_id,
+                "status": "pending",
+                "progress_pct": 0.0,
+                "error": None,
+                "result": None,
+                "created_at": now_str,
+                "completed_at": None,
+            }
+
+        def _worker():
+            with cls._job_lock:
+                if job_id in cls._jobs:
+                    cls._jobs[job_id]["status"] = "running"
+                    cls._jobs[job_id]["progress_pct"] = 15.0
+
+            db: Session = db_factory()
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                res = loop.run_until_complete(
+                    cls.run_benchmark_suite(
+                        db=db,
+                        baseline_variants=request.baseline_variants,
+                        categories=request.categories,
+                        data_source_id=request.data_source_id,
+                    )
+                )
+                loop.close()
+                with cls._job_lock:
+                    if job_id in cls._jobs:
+                        cls._jobs[job_id]["status"] = "completed"
+                        cls._jobs[job_id]["progress_pct"] = 100.0
+                        cls._jobs[job_id]["result"] = res
+                        cls._jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            except Exception as exc:
+                with cls._job_lock:
+                    if job_id in cls._jobs:
+                        cls._jobs[job_id]["status"] = "failed"
+                        cls._jobs[job_id]["error"] = str(exc)
+                        cls._jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            finally:
+                db.close()
+
+        threading.Thread(target=_worker, daemon=True).start()
+        return job_id
+
+    @classmethod
+    def get_job_status(cls, job_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves current job status record."""
+        with cls._job_lock:
+            return cls._jobs.get(job_id)
+

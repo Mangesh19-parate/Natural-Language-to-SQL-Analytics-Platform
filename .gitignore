@@ -55,3 +55,10 @@ yarn-error.log*
 *.sqlite3
 *.db
 local_data/
+storage/
+
+# Customizations & Agents
+.agents/
+skills/
+plugins/
+

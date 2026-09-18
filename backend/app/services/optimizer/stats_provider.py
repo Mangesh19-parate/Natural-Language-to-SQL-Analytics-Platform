@@ -1,5 +1,6 @@
+import time
 import math
-from datetime import datetime, timezone
+import hashlib
 from typing import Dict, List, Optional, Tuple, Any
 from sqlalchemy import Engine, inspect, text
 from app.services.optimizer.models import CalibratedTableStats, DEFAULT_TABLE_STATS
@@ -10,16 +11,15 @@ class TableStatsProvider:
     Introspects and caches live database statistics (tuple counts, pages, exact index columns, PK/FK, NDVs)
     from SQLAlchemy Engine, partitioned strictly per data source identity / engine to prevent cross-tenant cache contamination.
     """
-    _cache: Dict[str, Dict[str, CalibratedTableStats]] = {}
-    _cache_source: Dict[str, str] = {}
-    _last_refresh: Dict[str, datetime] = {}
-    _ttl_seconds: int = 300
+    _cache: Dict[str, Tuple[Dict[str, CalibratedTableStats], str, float]] = {}
+    _ttl_seconds: float = 300.0
 
     @classmethod
     def _get_cache_key(cls, data_source_id: int, engine: Optional[Engine]) -> str:
         if engine is not None:
             engine_str = str(engine.url)
-            return f"ds_{data_source_id}:{hash(engine_str)}"
+            engine_hash = hashlib.sha256(engine_str.encode("utf-8")).hexdigest()[:16]
+            return f"ds_{data_source_id}:{engine_hash}"
         return f"ds_{data_source_id}:fallback"
 
     @classmethod
@@ -58,22 +58,18 @@ class TableStatsProvider:
         data_source_id: int = 1,
         force_refresh: bool = False,
     ) -> Tuple[Dict[str, CalibratedTableStats], str]:
-        now = datetime.now(timezone.utc)
+        now = time.time()
         cache_key = cls._get_cache_key(data_source_id, engine)
 
-        if (
-            not force_refresh
-            and cache_key in cls._cache
-            and cache_key in cls._last_refresh
-            and (now - cls._last_refresh[cache_key]).total_seconds() < cls._ttl_seconds
-        ):
-            return cls._cache[cache_key], cls._cache_source.get(cache_key, "calibrated_cache")
+        if not force_refresh and cache_key in cls._cache:
+            stats, source, ts = cls._cache[cache_key]
+            if now - ts < cls._ttl_seconds:
+                return stats, source
 
         if engine is None:
-            cls._cache[cache_key] = dict(DEFAULT_TABLE_STATS)
-            cls._cache_source[cache_key] = "calibrated_cache"
-            cls._last_refresh[cache_key] = now
-            return cls._cache[cache_key], cls._cache_source[cache_key]
+            cached_item = (dict(DEFAULT_TABLE_STATS), "calibrated_cache", now)
+            cls._cache[cache_key] = cached_item
+            return cached_item[0], cached_item[1]
 
         try:
             inspector = inspect(engine)
@@ -84,11 +80,13 @@ class TableStatsProvider:
                 for t_name in table_names:
                     t_lower = t_name.lower()
                     # 1. Live row count
+                    is_live_stat = True
                     try:
                         res = conn.execute(text(f'SELECT COUNT(*) FROM "{t_name}"'))
                         tuple_count = float(res.scalar() or 0)
                     except Exception:
-                        tuple_count = 100.0
+                        tuple_count = 0.0
+                        is_live_stat = False
 
                     # 2. Primary key constraint
                     try:
@@ -160,15 +158,12 @@ class TableStatsProvider:
                     )
 
             if stats_map:
-                cls._cache[cache_key] = stats_map
-                cls._cache_source[cache_key] = "live_engine"
-                cls._last_refresh[cache_key] = now
-                return cls._cache[cache_key], cls._cache_source[cache_key]
+                cls._cache[cache_key] = (stats_map, "live_engine", now)
+                return stats_map, "live_engine"
 
         except Exception:
             pass
 
-        cls._cache[cache_key] = dict(DEFAULT_TABLE_STATS)
-        cls._cache_source[cache_key] = "fallback_schema"
-        cls._last_refresh[cache_key] = now
-        return cls._cache[cache_key], cls._cache_source[cache_key]
+        cached_fallback = (dict(DEFAULT_TABLE_STATS), "fallback_schema", now)
+        cls._cache[cache_key] = cached_fallback
+        return cached_fallback[0], cached_fallback[1]

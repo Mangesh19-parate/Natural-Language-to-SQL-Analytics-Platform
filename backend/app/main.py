@@ -12,8 +12,11 @@ from app.core.logging_config import setup_logging
 # Initialize logging
 setup_logging(log_level="INFO", json_format=not settings.DEBUG)
 
-# Initialize tables for dev/local setup if enabled (decoupled in production for privilege separation)
-if getattr(settings, "DEBUG", True) and getattr(settings, "AUTO_CREATE_TABLES", False):
+# Initialize tables for dev/local setup if enabled (strictly forbidden in production: Alembic migrations only)
+if getattr(settings, "ENVIRONMENT", "development").lower() == "production" and getattr(settings, "AUTO_CREATE_TABLES", False):
+    raise RuntimeError("AUTO_CREATE_TABLES is forbidden in production. Use Alembic migrations.")
+
+if getattr(settings, "ENVIRONMENT", "development").lower() != "production" and getattr(settings, "AUTO_CREATE_TABLES", False):
     Base.metadata.create_all(bind=metadata_engine)
     BusinessBase.metadata.create_all(bind=business_admin_engine)
 

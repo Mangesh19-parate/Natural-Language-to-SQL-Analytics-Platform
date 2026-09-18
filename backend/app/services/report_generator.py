@@ -23,15 +23,11 @@ from reportlab.platypus import (
 )
 
 from app.schemas.report import ReportExportRequest, ReportQueryItem
+from app.services.storage_service import StorageService
 
 
 REPORTS_DIR = os.path.join(os.getcwd(), "local_data", "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
-
-
-class NumberedCanvas:
-    """Canvas helper to draw footer and page numbers in PDF."""
-    pass
 
 
 class ReportGeneratorService:
@@ -49,6 +45,7 @@ class ReportGeneratorService:
 
     def __init__(self, reports_dir: Optional[str] = None):
         self.reports_dir = reports_dir or REPORTS_DIR
+        self.storage = StorageService()
         os.makedirs(self.reports_dir, exist_ok=True)
 
     def generate_pdf(self, request: ReportExportRequest, user_id: int = 1) -> Tuple[str, str, str]:
@@ -59,8 +56,9 @@ class ReportGeneratorService:
         file_name = f"report_{report_id}.pdf"
         file_path = os.path.join(self.reports_dir, file_name)
 
+        buffer = io.BytesIO()
         doc = SimpleDocTemplate(
-            file_path,
+            buffer,
             pagesize=letter,
             rightMargin=36,
             leftMargin=36,
@@ -281,9 +279,19 @@ class ReportGeneratorService:
 
         # Footer Audit Stamp (Rule R8.3)
         doc.build(story)
+        pdf_bytes = buffer.getvalue()
+        content_hash = hashlib.sha256(pdf_bytes).hexdigest()
 
-        with open(file_path, "rb") as f:
-            content_hash = hashlib.sha256(f.read()).hexdigest()
+        # Persist through StorageService abstraction
+        self.storage.store_artifact(
+            content=pdf_bytes,
+            filename=file_name,
+            content_type="application/pdf",
+            prefix="reports",
+        )
+        # Write to local cache path
+        with open(file_path, "wb") as f:
+            f.write(pdf_bytes)
 
         return report_id, file_path, content_hash
 
@@ -419,16 +427,27 @@ class ReportGeneratorService:
                     col_letter = get_column_letter(col[0].column)
                     ws_data.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
-        wb.save(file_path)
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        excel_bytes = buffer.getvalue()
+        content_hash = hashlib.sha256(excel_bytes).hexdigest()
 
-        with open(file_path, "rb") as f:
-            content_hash = hashlib.sha256(f.read()).hexdigest()
+        # Persist through StorageService
+        self.storage.store_artifact(
+            content=excel_bytes,
+            filename=file_name,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            prefix="reports",
+        )
+        # Write to local cache path
+        with open(file_path, "wb") as f:
+            f.write(excel_bytes)
 
         return report_id, file_path, content_hash
 
     def get_report_file(self, report_id: str) -> Optional[Tuple[str, str]]:
         """
-        Locates a report file on disk and returns (file_path, media_type).
+        Locates a report file on disk or storage and returns (file_path, media_type).
         """
         pdf_path = os.path.join(self.reports_dir, f"report_{report_id}.pdf")
         if os.path.exists(pdf_path):
@@ -436,6 +455,21 @@ class ReportGeneratorService:
 
         xlsx_path = os.path.join(self.reports_dir, f"report_{report_id}.xlsx")
         if os.path.exists(xlsx_path):
+            return xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        # Check storage service artifacts
+        pdf_key = f"reports/report_{report_id}.pdf"
+        pdf_bytes = self.storage.retrieve_artifact(pdf_key)
+        if pdf_bytes:
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_bytes)
+            return pdf_path, "application/pdf"
+
+        xlsx_key = f"reports/report_{report_id}.xlsx"
+        xlsx_bytes = self.storage.retrieve_artifact(xlsx_key)
+        if xlsx_bytes:
+            with open(xlsx_path, "wb") as f:
+                f.write(xlsx_bytes)
             return xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         return None

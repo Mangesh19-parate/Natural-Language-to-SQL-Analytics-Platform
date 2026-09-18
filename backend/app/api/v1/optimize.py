@@ -17,11 +17,10 @@ from app.schemas.optimize import (
     JoinPlanResponse,
 )
 from app.services.auth_service import get_current_user, require_roles, authorize_resource_access, authorize_query_access
-from app.services.data_source_manager import DataSourceManager
+from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
-from app.services.optimizer import QueryOptimizerService
-from app.services.join_optimizer import CostBasedJoinOptimizer
+from app.services.optimizer import QueryOptimizerService, CostBasedJoinOptimizer
 
 router = APIRouter(prefix="", tags=["Optimization"])
 
@@ -274,7 +273,13 @@ def optimize_join_plan(
         )
 
     exec_sql = policy_res.injected_sql or request.sql
-    target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
+    try:
+        target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
+    except DataSourceUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
     plan_response = CostBasedJoinOptimizer.optimize_query(
         sql=exec_sql,
         engine=target_engine,

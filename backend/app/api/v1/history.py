@@ -16,7 +16,7 @@ from app.schemas.history import (
 from app.schemas.query import SQLExecuteResponse
 from app.schemas.common import StandardResponse
 from app.services.auth_service import get_current_user, get_effective_role_id, authorize_query_access
-from app.services.data_source_manager import DataSourceManager
+from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
 from app.services.sql_critic import SQLCriticService
@@ -234,7 +234,13 @@ def rerun_historical_query(
     )
 
     # Resolve target engine dynamically via DataSourceManager
-    exec_engine = DataSourceManager.get_engine(db, data_source_id=rerun_req.data_source_id)
+    try:
+        exec_engine = DataSourceManager.get_engine(db, data_source_id=rerun_req.data_source_id)
+    except DataSourceUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
 
     # Execute sandbox
     sandbox_res = ExecutionSandboxService.execute_query(

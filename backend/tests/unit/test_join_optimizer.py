@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from app.schemas.agent import PlanSubTask
 from app.services.dag_validator import DAGValidator, DAGValidationError
-from app.services.join_optimizer import (
+from app.services.optimizer import (
     CostBasedJoinOptimizer,
     JoinGraph,
     JoinEdge,

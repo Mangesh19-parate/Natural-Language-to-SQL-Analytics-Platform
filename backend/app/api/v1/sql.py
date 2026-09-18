@@ -20,7 +20,7 @@ from app.schemas.query import (
     ErrorTaxonomyType,
 )
 from app.services.auth_service import get_current_user, get_effective_role_id, authorize_query_access
-from app.services.data_source_manager import DataSourceManager
+from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.sql_parser import SQLASTParser
@@ -30,7 +30,7 @@ from app.services.self_correction import SelfCorrectionService
 from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
 from app.services.chart_engine import ChartEngineService
-from app.services.join_optimizer import CostBasedJoinOptimizer
+from app.services.optimizer import CostBasedJoinOptimizer
 from app.schemas.optimize import GateDecisionEnum
 
 router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
@@ -233,7 +233,13 @@ def execute_sandboxed_sql(
             authorize_query_access(db, current_user, request.query_id, action="execute/update")
 
     effective_role_id = get_effective_role_id(current_user, request.role_id)
-    target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
+    try:
+        target_engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
+    except DataSourceUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
 
     policy_res = PolicyEngine.validate_sql(
         db=db,

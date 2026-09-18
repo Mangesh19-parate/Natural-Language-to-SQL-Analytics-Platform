@@ -3,23 +3,16 @@ from sqlalchemy.orm import sessionmaker, Session
 from app.config import settings
 from app.db.base import Base, BusinessBase
 
-# Metadata DB Engine & Session (Tunable Connection Pool)
+# Metadata DB Engine & Session (Calibrated Connection Pool)
 metadata_db_url = settings.get_effective_metadata_db_url()
 metadata_connect_args = {"check_same_thread": False} if "sqlite" in metadata_db_url else {}
 metadata_pool_kwargs = {}
 if "sqlite" not in metadata_db_url:
     metadata_pool_kwargs = {
-        "pool_size": 100,
-        "max_overflow": 200,
+        "pool_size": 10,
+        "max_overflow": 20,
         "pool_timeout": 30.0,
         "pool_recycle": 1800,
-    }
-else:
-    from sqlalchemy.pool import QueuePool
-    metadata_pool_kwargs = {
-        "pool_size": 100,
-        "max_overflow": 200,
-        "pool_timeout": 30.0,
     }
 
 metadata_engine = create_engine(
@@ -36,16 +29,10 @@ business_connect_args = {"check_same_thread": False} if "sqlite" in business_db_
 business_pool_kwargs = {}
 if "sqlite" not in business_db_url:
     business_pool_kwargs = {
-        "pool_size": 100,
-        "max_overflow": 200,
+        "pool_size": 10,
+        "max_overflow": 20,
         "pool_timeout": 30.0,
         "pool_recycle": 1800,
-    }
-else:
-    business_pool_kwargs = {
-        "pool_size": 100,
-        "max_overflow": 200,
-        "pool_timeout": 30.0,
     }
 
 business_engine = create_engine(

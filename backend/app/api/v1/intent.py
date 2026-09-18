@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.db.session import get_db, business_engine
+from app.db.session import get_db
 from app.models.auth import User
 from app.schemas.common import StandardResponse
 from app.schemas.intent import (
@@ -11,6 +11,7 @@ from app.schemas.intent import (
 from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.semantic_catalog_service import SemanticCatalogService
 from app.services.query_classifier import QueryClassifierService
+from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 
 router = APIRouter(prefix="/intent", tags=["Intent Analysis & Ambiguity"])
 
@@ -29,14 +30,18 @@ def classify_intent(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty.")
 
     effective_role_id = get_effective_role_id(current_user, request.role_id)
+    target_ds_id = request.data_source_id or 1
 
-    # Retrieve policy-filtered catalog for role
-    catalog = SemanticCatalogService.get_catalog_for_role(
-        db=db,
-        data_source_id=request.data_source_id or 1,
-        role_id=effective_role_id,
-        business_engine=business_engine
-    )
+    try:
+        target_engine = DataSourceManager.get_engine(db, data_source_id=target_ds_id)
+        catalog = SemanticCatalogService.get_catalog_for_role(
+            db=db,
+            data_source_id=target_ds_id,
+            role_id=effective_role_id,
+            business_engine=target_engine
+        )
+    except (ValueError, DataSourceUnavailableError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     result = QueryClassifierService.classify_question(
         question=request.question,

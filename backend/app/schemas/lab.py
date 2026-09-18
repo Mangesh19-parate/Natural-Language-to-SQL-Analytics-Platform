@@ -132,3 +132,21 @@ class EvaluationBenchmarkResponse(BaseModel):
     category_breakdown: List[CategoryMetricRow]
     detailed_results: List[EvaluationResultItem]
     executed_at: str
+
+
+class EvaluationJobAcceptedResponse(BaseModel):
+    job_id: str
+    status: str = "pending"  # "pending" | "running" | "completed" | "failed"
+    message: str = "Benchmark evaluation job enqueued successfully"
+    status_url: str
+
+
+class EvaluationJobStatusResponse(BaseModel):
+    job_id: str
+    status: str  # "pending" | "running" | "completed" | "failed"
+    progress_pct: float = 0.0
+    error: Optional[str] = None
+    result: Optional[EvaluationBenchmarkResponse] = None
+    created_at: str
+    completed_at: Optional[str] = None
+

@@ -5,7 +5,8 @@ from app.main import app
 from app.models.policy import DataSource
 from app.services.llm_provider import LLMProviderService, LLMResponse
 from app.services.execution_sandbox import ExecutionSandboxService
-from app.services.join_optimizer import CostBasedJoinOptimizer, GateDecisionEnum
+from app.services.optimizer import CostBasedJoinOptimizer
+from app.schemas.optimize import GateDecisionEnum
 from app.services.self_correction import SelfCorrectionService, ErrorTaxonomyType
 from app.services.auth_service import AuthService
 from tests.conftest import create_test_auth_headers

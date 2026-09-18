@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import text, Engine
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError, OperationalError, TimeoutError as SATimeoutError
 
 
 class SandboxExecutionResult(BaseModel):
@@ -14,6 +15,7 @@ class SandboxExecutionResult(BaseModel):
     latency_ms: int = 0
     truncated: bool = False
     error: Optional[str] = None
+    error_class: Optional[str] = None
 
 
 class ExecutionSandboxService:
@@ -33,22 +35,25 @@ class ExecutionSandboxService:
         cls,
         engine: Engine,
         sql: str,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-        max_rows: int = DEFAULT_MAX_ROWS,
+        timeout_seconds: Optional[float] = None,
+        max_rows: Optional[int] = None,
     ) -> SandboxExecutionResult:
         """
-        Executes a validated SQL query against the read-only engine connection with limits.
+        Executes a SQL query in a sandboxed connection with strict timeout and row limits.
         """
+        timeout = timeout_seconds or cls.DEFAULT_TIMEOUT_SECONDS
+        max_rows = max_rows or cls.DEFAULT_MAX_ROWS
         start_time = time.time()
         cleaned_sql = sql.strip().rstrip(";")
 
         try:
             with engine.connect() as conn:
-                # Set database statement timeout if supported by dialect
+                # Set statement timeout based on dialect if supported
                 dialect_name = engine.dialect.name
                 if dialect_name == "postgresql":
-                    timeout_ms = int(timeout_seconds * 1000)
-                    conn.execute(text(f"SET statement_timeout = {timeout_ms};"))
+                    conn.execute(text(f"SET statement_timeout = {int(timeout * 1000)}"))
+                elif dialect_name == "mysql":
+                    conn.execute(text(f"SET max_execution_time = {int(timeout * 1000)}"))
 
                 # Execute statement
                 result_proxy = conn.execute(text(cleaned_sql))
@@ -95,6 +100,45 @@ class ExecutionSandboxService:
                     truncated=truncated,
                 )
 
+        except (SATimeoutError, TimeoutError) as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            return SandboxExecutionResult(
+                success=False,
+                sql=sql,
+                columns=[],
+                rows=[],
+                row_count=0,
+                latency_ms=latency_ms,
+                truncated=False,
+                error=f"Query timed out after {timeout}s: {e}",
+                error_class="TIMEOUT_ERROR",
+            )
+        except OperationalError as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            return SandboxExecutionResult(
+                success=False,
+                sql=sql,
+                columns=[],
+                rows=[],
+                row_count=0,
+                latency_ms=latency_ms,
+                truncated=False,
+                error=f"Database operational error: {e.orig if hasattr(e, 'orig') else e}",
+                error_class="DATABASE_OPERATIONAL_ERROR",
+            )
+        except SQLAlchemyError as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            return SandboxExecutionResult(
+                success=False,
+                sql=sql,
+                columns=[],
+                rows=[],
+                row_count=0,
+                latency_ms=latency_ms,
+                truncated=False,
+                error=f"Database query error: {e.orig if hasattr(e, 'orig') else e}",
+                error_class="DATABASE_QUERY_ERROR",
+            )
         except Exception as e:
             latency_ms = int((time.time() - start_time) * 1000)
             return SandboxExecutionResult(
@@ -106,4 +150,5 @@ class ExecutionSandboxService:
                 latency_ms=latency_ms,
                 truncated=False,
                 error=str(e),
+                error_class="INTERNAL_ERROR",
             )

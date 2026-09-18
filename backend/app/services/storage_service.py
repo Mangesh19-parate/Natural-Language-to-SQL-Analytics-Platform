@@ -31,8 +31,7 @@ class StorageService:
         """
         Stores artifact bytes and returns metadata (key, filename, content_type, size_bytes, uri).
         """
-        unique_id = str(uuid.uuid4())[:8]
-        file_key = f"{prefix}/{unique_id}_{filename}"
+        file_key = f"{prefix}/{filename}"
 
         if self.backend == "local":
             full_path = os.path.join(self.local_dir, file_key)
@@ -74,19 +73,8 @@ class StorageService:
                     "uri": f"s3://{bucket_name}/{file_key}",
                 }
             except Exception as e:
-                logger.error(f"S3 upload failed: {e}. Falling back to local storage.")
-                full_path = os.path.join(self.local_dir, file_key)
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "wb") as f:
-                    f.write(content)
-                return {
-                    "file_key": file_key,
-                    "filename": filename,
-                    "content_type": content_type,
-                    "size_bytes": len(content),
-                    "storage_backend": "local_fallback",
-                    "uri": full_path,
-                }
+                logger.error(f"S3 artifact upload failed: {e}")
+                raise RuntimeError(f"Storage backend '{self.backend}' failed to persist artifact: {e}") from e
 
     def retrieve_artifact(self, file_key: str) -> Optional[bytes]:
         """Retrieves raw artifact content by key."""
