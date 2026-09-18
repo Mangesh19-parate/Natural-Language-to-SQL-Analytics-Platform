@@ -46,15 +46,7 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
             detail="User account is deactivated",
         )
 
-    role_name = user.role.role_name if user.role else "viewer"
-    token_claims = {
-        "sub": str(user.user_id),
-        "user_id": user.user_id,
-        "email": user.email,
-        "role_name": role_name,
-        "role_id": user.role_id,
-    }
-
+    token_claims = user.to_token_claims()
     access_token = AuthService.create_access_token(data=token_claims)
     refresh_token = AuthService.create_refresh_token(data=token_claims)
 
@@ -63,7 +55,7 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)):
         full_name=user.full_name,
         email=user.email,
         role_id=user.role_id,
-        role_name=role_name,
+        role_name=token_claims["role_name"],
         is_active=user.is_active,
     )
 

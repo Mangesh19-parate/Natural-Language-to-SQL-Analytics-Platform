@@ -30,6 +30,26 @@ REPORTS_DIR = os.path.join(os.getcwd(), "local_data", "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 
+# Shared Report Styling & Palette Constants
+COLOR_PRIMARY = colors.HexColor("#1e293b")
+COLOR_ACCENT = colors.HexColor("#2563eb")
+COLOR_SUCCESS = colors.HexColor("#16a34a")
+COLOR_BG_LIGHT = colors.HexColor("#f8fafc")
+COLOR_BORDER = colors.HexColor("#e2e8f0")
+COLOR_TEXT_DARK = colors.HexColor("#0f172a")
+COLOR_TEXT_MUTED = colors.HexColor("#64748b")
+
+_SAMPLE_STYLES = getSampleStyleSheet()
+REPORT_STYLES = {
+    "title": ParagraphStyle("RptTitle", parent=_SAMPLE_STYLES["Heading1"], fontSize=20, leading=24, textColor=COLOR_PRIMARY, fontName="Helvetica-Bold", spaceAfter=4),
+    "subtitle": ParagraphStyle("RptSub", parent=_SAMPLE_STYLES["Normal"], fontSize=10, leading=13, textColor=COLOR_TEXT_MUTED, fontName="Helvetica", spaceAfter=12),
+    "h2": ParagraphStyle("RptH2", parent=_SAMPLE_STYLES["Heading2"], fontSize=13, leading=16, textColor=COLOR_ACCENT, fontName="Helvetica-Bold", spaceBefore=12, spaceAfter=6),
+    "nl": ParagraphStyle("RptNL", parent=_SAMPLE_STYLES["Normal"], fontSize=11, leading=15, textColor=COLOR_TEXT_DARK, fontName="Helvetica-Bold"),
+    "body": ParagraphStyle("RptBody", parent=_SAMPLE_STYLES["Normal"], fontSize=9, leading=12, textColor=COLOR_TEXT_DARK, fontName="Helvetica"),
+    "code": ParagraphStyle("RptCode", parent=_SAMPLE_STYLES["Code"], fontSize=8.5, leading=11, textColor=COLOR_TEXT_DARK, fontName="Courier", backColor=colors.HexColor("#f1f5f9"), borderColor=COLOR_BORDER, borderWidth=0.5, borderPadding=6, spaceBefore=4, spaceAfter=6),
+}
+
+
 class ReportGeneratorService:
     """
     Reporting Engine (REQ-RPT-01, REQ-RPT-02, Rule R8.3)
@@ -66,80 +86,18 @@ class ReportGeneratorService:
             bottomMargin=40,
         )
 
-        styles = getSampleStyleSheet()
-        
-        # Custom palette & styles
-        primary_color = colors.HexColor("#1e293b")
-        accent_color = colors.HexColor("#2563eb")
-        success_color = colors.HexColor("#16a34a")
-        bg_light = colors.HexColor("#f8fafc")
-        border_color = colors.HexColor("#e2e8f0")
-        text_dark = colors.HexColor("#0f172a")
-        text_muted = colors.HexColor("#64748b")
-
-        title_style = ParagraphStyle(
-            "ReportTitle",
-            parent=styles["Heading1"],
-            fontSize=20,
-            leading=24,
-            textColor=primary_color,
-            fontName="Helvetica-Bold",
-            spaceAfter=4,
-        )
-
-        subtitle_style = ParagraphStyle(
-            "ReportSubtitle",
-            parent=styles["Normal"],
-            fontSize=10,
-            leading=13,
-            textColor=text_muted,
-            fontName="Helvetica",
-            spaceAfter=12,
-        )
-
-        h2_style = ParagraphStyle(
-            "Heading2Custom",
-            parent=styles["Heading2"],
-            fontSize=13,
-            leading=16,
-            textColor=accent_color,
-            fontName="Helvetica-Bold",
-            spaceBefore=12,
-            spaceAfter=6,
-        )
-
-        nl_style = ParagraphStyle(
-            "NLQuestionStyle",
-            parent=styles["Normal"],
-            fontSize=11,
-            leading=15,
-            textColor=text_dark,
-            fontName="Helvetica-Bold",
-        )
-
-        body_style = ParagraphStyle(
-            "BodyCustom",
-            parent=styles["Normal"],
-            fontSize=9,
-            leading=12,
-            textColor=text_dark,
-            fontName="Helvetica",
-        )
-
-        code_style = ParagraphStyle(
-            "SQLCodeStyle",
-            parent=styles["Code"],
-            fontSize=8.5,
-            leading=11,
-            textColor=colors.HexColor("#0f172a"),
-            fontName="Courier",
-            backColor=colors.HexColor("#f1f5f9"),
-            borderColor=border_color,
-            borderWidth=0.5,
-            borderPadding=6,
-            spaceBefore=4,
-            spaceAfter=6,
-        )
+        title_style = REPORT_STYLES["title"]
+        subtitle_style = REPORT_STYLES["subtitle"]
+        h2_style = REPORT_STYLES["h2"]
+        nl_style = REPORT_STYLES["nl"]
+        body_style = REPORT_STYLES["body"]
+        code_style = REPORT_STYLES["code"]
+        border_color = COLOR_BORDER
+        accent_color = COLOR_ACCENT
+        primary_color = COLOR_PRIMARY
+        bg_light = COLOR_BG_LIGHT
+        text_dark = COLOR_TEXT_DARK
+        text_muted = COLOR_TEXT_MUTED
 
         story = []
         gen_timestamp = datetime.now(timezone.utc).isoformat()

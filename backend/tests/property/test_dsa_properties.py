@@ -1,6 +1,6 @@
 import pytest
 from hypothesis import given, strategies as st, settings
-from app.services.dag_validator import DAGValidator, DAGValidationError
+from app.services.dag_planner import DAGValidator, DAGValidationError
 from app.schemas.agent import PlanSubTask
 
 

@@ -30,6 +30,16 @@ class User(Base):
     reports = relationship("Report", back_populates="user")
     feedbacks = relationship("Feedback", back_populates="user")
 
+    def to_token_claims(self) -> dict:
+        role_name = self.role.role_name if self.role else "viewer"
+        return {
+            "sub": str(self.user_id),
+            "user_id": self.user_id,
+            "email": self.email,
+            "role_name": role_name,
+            "role_id": self.role_id,
+        }
+
 
 class RevokedToken(Base):
     __tablename__ = "revoked_tokens"
