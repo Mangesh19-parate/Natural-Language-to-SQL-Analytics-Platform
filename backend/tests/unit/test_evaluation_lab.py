@@ -161,3 +161,15 @@ async def test_evaluation_lab_multi_baseline_run(seed_eval_lab_db: Session):
         assert row.category in test_categories
         assert row.baseline_d_safety_violation == 0.0
         assert row.baseline_d_avg_latency_ms >= 0
+
+    assert "executable_ground_truth_cases" in response.overall_metrics
+    assert "security_adversarial_cases" in response.overall_metrics
+
+
+def test_compare_results_rejects_incompatible_column_schemas():
+    """Verify that candidate with 'name | salary' and reference with 'city | revenue' returns False."""
+    cand_rows = [{"name": "Alice", "salary": 100000}]
+    ref_rows = [{"city": "Alice", "revenue": 100000}]
+
+    assert EvaluationLabService._compare_results(cand_rows, ref_rows) is False
+

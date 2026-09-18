@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from app.schemas.policy import PolicyValidationResult
 from app.schemas.reliability import ReliabilityBreakdown
 from app.schemas.visualization import ChartSpec
+from app.schemas.optimize import JoinPlanResponse
 
 
 class CriticFindingType(str, Enum):
@@ -186,5 +187,6 @@ class SQLExecuteResponse(BaseModel):
     result_validation: Optional[ResultValidationReport] = None
     reliability_breakdown: Optional[ReliabilityBreakdown] = None
     chart_spec: Optional[ChartSpec] = None
+    optimization_plan: Optional[JoinPlanResponse] = None
 
 

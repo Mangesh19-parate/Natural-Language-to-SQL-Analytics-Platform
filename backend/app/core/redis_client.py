@@ -1,7 +1,7 @@
 import time
 import json
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import redis
 from app.config import settings
 
@@ -121,15 +121,34 @@ class RedisService:
     end
     """
 
+    _local_rate_limits: Dict[str, List[float]] = {}
+
+    def _check_local_rate_limit(self, identifier: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
+        """In-memory sliding-window fallback when Redis is unavailable (Fail-Safe Degraded Mode)."""
+        now = time.time()
+        cutoff = now - window_seconds
+        
+        # Clean expired timestamps
+        timestamps = self._local_rate_limits.setdefault(identifier, [])
+        self._local_rate_limits[identifier] = [t for t in timestamps if t > cutoff]
+        current_reqs = len(self._local_rate_limits[identifier])
+
+        if current_reqs < limit:
+            self._local_rate_limits[identifier].append(now)
+            remaining = limit - current_reqs - 1
+            return True, remaining, window_seconds
+        else:
+            return False, 0, window_seconds
+
     def check_rate_limit(self, identifier: str, limit: int = 60, window_seconds: int = 60) -> tuple[bool, int, int]:
         """
         Atomic Sliding-Window Rate Limiter using Redis Lua script.
-        Prevents race conditions under high concurrent load.
+        Prevents race conditions under high concurrent load with bounded in-memory fallback.
         Returns: (is_allowed: bool, remaining_requests: int, reset_seconds: int)
         """
         if not self.is_available or self._client is None:
-            # If Redis is unavailable, allow request in degraded mode
-            return True, limit, window_seconds
+            # Fallback to local process bounded sliding window
+            return self._check_local_rate_limit(identifier, limit, window_seconds)
 
         key = f"ratelimit:{identifier}"
         now = time.time()
@@ -149,8 +168,8 @@ class RedisService:
             remaining = int(res[1])
             return is_allowed, remaining, window_seconds
         except Exception as e:
-            logger.error(f"Rate limiter Redis error: {e}")
-            return True, limit, window_seconds
+            logger.error(f"Rate limiter Redis error: {e}. Utilizing local fallback.")
+            return self._check_local_rate_limit(identifier, limit, window_seconds)
 
     # ------------------------------------------------------------------
     # 3. Semantic Catalog Caching (PERF-CATALOG)

@@ -217,3 +217,70 @@ def test_execution_benchmarking_live_engine():
     assert bench.validation_status == "VERIFIED_EQUIVALENT"
     assert bench.original_exec_ms >= 0.0
     assert bench.optimized_exec_ms >= 0.0
+
+
+def test_optimizer_shape_bypass_cte():
+    """Verify that CTE queries are safely bypassed without destructive table flattening."""
+    sql = """
+        WITH dept_avg AS (
+            SELECT department_id, AVG(salary) AS avg_sal
+            FROM employees
+            GROUP BY department_id
+        )
+        SELECT e.first_name, d.avg_sal
+        FROM employees e
+        JOIN dept_avg d ON e.department_id = d.department_id;
+    """
+    resp = CostBasedJoinOptimizer.optimize_query(sql)
+    assert "BYPASS" in resp.search_strategy
+    assert resp.gate_decision == GateDecisionEnum.ALLOW
+    assert resp.optimized_sql == sql
+
+
+def test_optimizer_shape_bypass_subquery():
+    """Verify that nested subqueries in FROM/WHERE are safely bypassed."""
+    sql = """
+        SELECT c.customer_name
+        FROM customers c
+        WHERE c.customer_id IN (
+            SELECT customer_id FROM orders WHERE total_amount > 500
+        );
+    """
+    resp = CostBasedJoinOptimizer.optimize_query(sql)
+    assert "BYPASS" in resp.search_strategy
+    assert resp.optimized_sql == sql
+
+
+def test_optimizer_outer_join_preservation():
+    """Verify that LEFT/RIGHT/FULL outer joins are preserved without arbitrary reordering."""
+    sql = """
+        SELECT d.department_name, e.first_name
+        FROM departments d
+        LEFT JOIN employees e ON d.department_id = e.department_id;
+    """
+    resp = CostBasedJoinOptimizer.optimize_query(sql)
+    assert resp.search_strategy == "PRESERVED_OUTER_JOIN"
+    assert resp.gate_decision == GateDecisionEnum.ALLOW
+    assert "LEFT JOIN" in resp.optimized_sql.upper()
+
+
+def test_stats_provider_cache_isolation_per_data_source():
+    """Verify that TableStatsProvider isolates cached statistics across distinct data sources."""
+    engine1 = create_engine("sqlite:///:memory:")
+    with engine1.connect() as conn:
+        conn.execute(text("CREATE TABLE customers (id INT, name TEXT);"))
+        conn.execute(text("INSERT INTO customers VALUES (1, 'Alice');"))
+        conn.commit()
+
+    engine2 = create_engine("sqlite:///:memory:")
+    with engine2.connect() as conn:
+        conn.execute(text("CREATE TABLE customers (id INT, name TEXT);"))
+        conn.execute(text("INSERT INTO customers VALUES (1, 'Bob'), (2, 'Charlie'), (3, 'David');"))
+        conn.commit()
+
+    stats1, _ = TableStatsProvider.get_stats_map(engine1, data_source_id=1, force_refresh=True)
+    stats2, _ = TableStatsProvider.get_stats_map(engine2, data_source_id=2, force_refresh=True)
+
+    assert stats1["customers"].tuple_count == 1.0
+    assert stats2["customers"].tuple_count == 3.0
+

@@ -29,6 +29,8 @@ from app.services.self_correction import SelfCorrectionService
 from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
 from app.services.chart_engine import ChartEngineService
+from app.services.join_optimizer import CostBasedJoinOptimizer
+from app.schemas.optimize import GateDecisionEnum
 
 router = APIRouter(prefix="/sql", tags=["SQL Generation & Policy Engine"])
 
@@ -269,9 +271,53 @@ def execute_sandboxed_sql(
         sql=execution_sql,
     )
 
+    # Pre-execution Cost-Based Join Planning & Admission Gating (Principle R2)
+    opt_res = CostBasedJoinOptimizer.optimize_query(
+        sql=execution_sql,
+        engine=business_engine,
+        data_source_id=request.data_source_id,
+    )
+
+    # Gate Decision Check (Block runaway Cartesian / excess cost)
+    if opt_res.gate_decision in [GateDecisionEnum.BLOCK_RUNAWAY_CARTESIAN, GateDecisionEnum.BLOCK_EXPENSIVE]:
+        error_type = ErrorTaxonomyType.E4_SEMANTIC
+        reliability = ReliabilityScorerService.compute_reliability_score(
+            db=db,
+            sql=execution_sql,
+            role_id=effective_role_id,
+            data_source_id=request.data_source_id,
+            policy_validation=policy_res,
+            critic_analysis=critic_res,
+            execution_success=False,
+            row_count=0,
+            latency_ms=0,
+        )
+        _persist_query_reliability(
+            db, request.query_id, reliability.model_dump(), execution_sql, "rejected_optimizer", 0, 0, user_id=current_user.user_id
+        )
+        return SQLExecuteResponse(
+            success=False,
+            sql=request.sql,
+            injected_sql=execution_sql,
+            columns=[],
+            rows=[],
+            row_count=0,
+            latency_ms=0,
+            truncated=False,
+            policy_validation=policy_res,
+            critic_analysis=critic_res,
+            error=f"Query rejected by Optimizer Admission Gate: {opt_res.gate_reason}",
+            error_type=error_type,
+            reliability_breakdown=reliability,
+            optimization_plan=opt_res,
+        )
+
+    # Execute optimized SQL if safe rewrite was generated, else fallback to execution_sql
+    final_execution_sql = opt_res.optimized_sql if (opt_res.optimized_sql and opt_res.gate_decision == GateDecisionEnum.ALLOW) else execution_sql
+
     sandbox_res = ExecutionSandboxService.execute_query(
         engine=business_engine,
-        sql=execution_sql,
+        sql=final_execution_sql,
         timeout_seconds=request.timeout_seconds,
         max_rows=request.max_rows,
     )
@@ -280,7 +326,7 @@ def execute_sandboxed_sql(
     if sandbox_res.success:
         validation_report = ResultValidatorService.validate_results(
             db=db,
-            sql=execution_sql,
+            sql=final_execution_sql,
             columns=sandbox_res.columns,
             rows=sandbox_res.rows,
             row_count=sandbox_res.row_count,
@@ -288,7 +334,7 @@ def execute_sandboxed_sql(
         )
         reliability = ReliabilityScorerService.compute_reliability_score(
             db=db,
-            sql=execution_sql,
+            sql=final_execution_sql,
             role_id=effective_role_id,
             data_source_id=request.data_source_id,
             policy_validation=policy_res,
@@ -306,12 +352,12 @@ def execute_sandboxed_sql(
             question=request.question,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value, result_hash=res_hash, data_source_id=request.data_source_id, user_id=current_user.user_id
+            db, request.query_id, reliability.model_dump(), final_execution_sql, "success", sandbox_res.row_count, sandbox_res.latency_ms, chart_spec.chart_type.value, result_hash=res_hash, data_source_id=request.data_source_id, user_id=current_user.user_id
         )
         return SQLExecuteResponse(
             success=True,
             sql=request.sql,
-            injected_sql=execution_sql,
+            injected_sql=final_execution_sql,
             columns=sandbox_res.columns,
             rows=sandbox_res.rows,
             row_count=sandbox_res.row_count,
@@ -322,6 +368,7 @@ def execute_sandboxed_sql(
             result_validation=validation_report,
             reliability_breakdown=reliability,
             chart_spec=chart_spec,
+            optimization_plan=opt_res,
         )
 
     # If execution failed, classify error
@@ -332,7 +379,7 @@ def execute_sandboxed_sql(
         correction_res = SelfCorrectionService.attempt_correction(
             db=db,
             original_question=request.question,
-            failing_sql=execution_sql,
+            failing_sql=final_execution_sql,
             error_message=sandbox_res.error or "Execution error",
             data_source_id=request.data_source_id,
             role_id=effective_role_id,
@@ -391,11 +438,12 @@ def execute_sandboxed_sql(
                     result_validation=val_rep,
                     reliability_breakdown=reliability,
                     chart_spec=repaired_chart_spec,
+                    optimization_plan=opt_res,
                 )
 
     reliability = ReliabilityScorerService.compute_reliability_score(
         db=db,
-        sql=execution_sql,
+        sql=final_execution_sql,
         role_id=effective_role_id,
         data_source_id=request.data_source_id,
         policy_validation=policy_res,
@@ -406,12 +454,12 @@ def execute_sandboxed_sql(
         execution_success=False,
     )
     _persist_query_reliability(
-        db, request.query_id, reliability.model_dump(), execution_sql, "failed", 0, sandbox_res.latency_ms, user_id=current_user.user_id
+        db, request.query_id, reliability.model_dump(), final_execution_sql, "failed", 0, sandbox_res.latency_ms, user_id=current_user.user_id
     )
     return SQLExecuteResponse(
         success=False,
         sql=request.sql,
-        injected_sql=execution_sql,
+        injected_sql=final_execution_sql,
         columns=[],
         rows=[],
         row_count=0,
@@ -423,6 +471,7 @@ def execute_sandboxed_sql(
         error_type=err_type,
         correction_result=correction_res,
         reliability_breakdown=reliability,
+        optimization_plan=opt_res,
     )
 
 
