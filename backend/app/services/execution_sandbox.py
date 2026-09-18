@@ -28,7 +28,9 @@ class ExecutionSandboxService:
     """
 
     DEFAULT_TIMEOUT_SECONDS: float = 10.0
-    DEFAULT_MAX_ROWS: int = 10000
+    MAX_TIMEOUT_SECONDS: float = 30.0
+    DEFAULT_MAX_ROWS: int = 1000
+    HARD_ROW_CEILING: int = 5000
 
     @classmethod
     def execute_query(
@@ -40,9 +42,13 @@ class ExecutionSandboxService:
     ) -> SandboxExecutionResult:
         """
         Executes a SQL query in a sandboxed connection with strict timeout and row limits.
+        Enforces hard server-side ceilings against malicious or unbounded parameters (SEC-5, SEC-6).
         """
-        timeout = timeout_seconds or cls.DEFAULT_TIMEOUT_SECONDS
-        max_rows = max_rows or cls.DEFAULT_MAX_ROWS
+        raw_timeout = timeout_seconds if timeout_seconds is not None and timeout_seconds > 0 else cls.DEFAULT_TIMEOUT_SECONDS
+        timeout = min(float(raw_timeout), cls.MAX_TIMEOUT_SECONDS)
+
+        raw_rows = max_rows if max_rows is not None and max_rows > 0 else cls.DEFAULT_MAX_ROWS
+        max_rows = min(int(raw_rows), cls.HARD_ROW_CEILING)
         start_time = time.time()
         cleaned_sql = sql.strip().rstrip(";")
 

@@ -205,5 +205,8 @@ def list_reports(
             ],
         }
     except Exception as e:
-        return {"success": True, "reports": []}
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list reports: {str(e)}",
+        )
 

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
-from app.models.lab import EvaluationRun, EvaluationResult
+from app.models.lab import EvaluationRun, EvaluationResult, EvaluationJob
 from app.schemas.lab import (
     BenchmarkQuestion,
     EvaluationResultItem,
@@ -925,10 +925,30 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
     ) -> str:
         """
         Enqueues asynchronous benchmark evaluation job (ADR 006 / REQ-JOB-01).
-        Runs evaluation in background worker and transitions status: pending -> running -> completed/failed.
+        Persists job in DB and runs evaluation in background worker.
         """
         job_id = f"job-{uuid.uuid4().hex[:12]}"
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        now_str = now_dt.isoformat()
+
+        # 1. Persist initial pending state in Database
+        db_init: Session = db_factory()
+        try:
+            db_job = EvaluationJob(
+                job_id=job_id,
+                status="pending",
+                progress_pct=0.0,
+                error=None,
+                result_json=None,
+                created_at=now_dt,
+            )
+            db_init.add(db_job)
+            db_init.commit()
+        except Exception:
+            db_init.rollback()
+        finally:
+            db_init.close()
+
         with cls._job_lock:
             cls._jobs[job_id] = {
                 "job_id": job_id,
@@ -948,6 +968,13 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
 
             db: Session = db_factory()
             try:
+                # Update DB to running
+                db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
+                if db_job:
+                    db_job.status = "running"
+                    db_job.progress_pct = 15.0
+                    db.commit()
+
                 import asyncio
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -960,18 +987,46 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     )
                 )
                 loop.close()
+
+                completed_dt = datetime.now(timezone.utc)
+                completed_str = completed_dt.isoformat()
+                result_json = res.model_dump_json() if hasattr(res, "model_dump_json") else json.dumps(res)
+
+                # Update DB to completed
+                db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
+                if db_job:
+                    db_job.status = "completed"
+                    db_job.progress_pct = 100.0
+                    db_job.result_json = result_json
+                    db_job.completed_at = completed_dt
+                    db.commit()
+
                 with cls._job_lock:
                     if job_id in cls._jobs:
                         cls._jobs[job_id]["status"] = "completed"
                         cls._jobs[job_id]["progress_pct"] = 100.0
                         cls._jobs[job_id]["result"] = res
-                        cls._jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+                        cls._jobs[job_id]["completed_at"] = completed_str
             except Exception as exc:
+                completed_dt = datetime.now(timezone.utc)
+                completed_str = completed_dt.isoformat()
+                err_msg = str(exc)
+
+                try:
+                    db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
+                    if db_job:
+                        db_job.status = "failed"
+                        db_job.error = err_msg
+                        db_job.completed_at = completed_dt
+                        db.commit()
+                except Exception:
+                    db.rollback()
+
                 with cls._job_lock:
                     if job_id in cls._jobs:
                         cls._jobs[job_id]["status"] = "failed"
-                        cls._jobs[job_id]["error"] = str(exc)
-                        cls._jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+                        cls._jobs[job_id]["error"] = err_msg
+                        cls._jobs[job_id]["completed_at"] = completed_str
             finally:
                 db.close()
 
@@ -979,8 +1034,34 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
         return job_id
 
     @classmethod
-    def get_job_status(cls, job_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves current job status record."""
+    def get_job_status(cls, job_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
+        """Retrieves current job status record from memory cache or persistent DB."""
         with cls._job_lock:
-            return cls._jobs.get(job_id)
+            cached = cls._jobs.get(job_id)
+            if cached:
+                return cached
+
+        if db:
+            try:
+                db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
+                if db_job:
+                    res_obj = None
+                    if db_job.result_json:
+                        try:
+                            res_dict = json.loads(db_job.result_json)
+                            res_obj = EvaluationBenchmarkResponse(**res_dict)
+                        except Exception:
+                            pass
+                    return {
+                        "job_id": db_job.job_id,
+                        "status": db_job.status,
+                        "progress_pct": float(db_job.progress_pct or 0.0),
+                        "error": db_job.error,
+                        "result": res_obj,
+                        "created_at": db_job.created_at.isoformat() if db_job.created_at else None,
+                        "completed_at": db_job.completed_at.isoformat() if db_job.completed_at else None,
+                    }
+            except Exception:
+                pass
+        return cached
 

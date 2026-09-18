@@ -4,7 +4,7 @@ from app.models.policy import DataSource, DataPolicy, SemanticCatalog, SchemaSna
 from app.models.session import SessionModel, QueryHistory
 from app.models.trust import SqlCriticFinding, ResultValidation, OptimizationSuggestion
 from app.models.audit import LlmCallLog, EncryptedTraceStore, Feedback, Report
-from app.models.lab import SecurityAttackLog, FailureLog, EvaluationRun, EvaluationResult
+from app.models.lab import SecurityAttackLog, FailureLog, EvaluationRun, EvaluationResult, EvaluationJob
 from app.models.business import Department, Employee, Customer, Product, Order, Sale
 
 __all__ = [
@@ -29,6 +29,7 @@ __all__ = [
     "FailureLog",
     "EvaluationRun",
     "EvaluationResult",
+    "EvaluationJob",
     "Department",
     "Employee",
     "Customer",

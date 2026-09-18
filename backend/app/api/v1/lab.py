@@ -64,8 +64,15 @@ def enqueue_evaluation_job(
     Submits a benchmark evaluation job to the asynchronous background worker queue (ADR 006).
     Returns HTTP 202 Accepted with a trackable job_id and status polling URL.
     """
+    def _get_db_session():
+        from app.main import app as fastapi_app
+        override = fastapi_app.dependency_overrides.get(get_db)
+        if override:
+            return override()
+        return SessionLocal()
+
     job_id = EvaluationLabService.submit_benchmark_job(
-        db_factory=SessionLocal,
+        db_factory=_get_db_session,
         request=request,
     )
     return EvaluationJobAcceptedResponse(
@@ -84,11 +91,12 @@ def enqueue_evaluation_job(
 def get_evaluation_job_status(
     job_id: str,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Polls the execution status and output results of an asynchronous benchmark job.
     """
-    job_record = EvaluationLabService.get_job_status(job_id)
+    job_record = EvaluationLabService.get_job_status(job_id, db=db)
     if not job_record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

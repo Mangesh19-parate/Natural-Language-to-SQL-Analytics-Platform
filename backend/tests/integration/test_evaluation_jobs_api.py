@@ -8,11 +8,26 @@ from app.models.auth import User, Role
 from app.services.auth_service import AuthService
 
 
+from app.models.policy import DataSource, SemanticCatalog, DataPolicy
+
+
 def get_admin_headers(db: Session) -> dict:
     role = db.query(Role).filter(Role.role_name == "admin").first()
     if not role:
         role = Role(role_name="admin")
         db.add(role)
+        db.commit()
+
+    ds = db.query(DataSource).filter(DataSource.data_source_id == 1).first()
+    if not ds:
+        ds = DataSource(data_source_id=1, name="Enterprise DB", db_type="sqlite", secret_ref="local", is_active=True)
+        db.add(ds)
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="customers", access_level="read", aggregate_allowed=True))
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="departments", access_level="read", aggregate_allowed=True))
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="employees", access_level="read", aggregate_allowed=True))
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="products", access_level="read", aggregate_allowed=True))
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="orders", access_level="read", aggregate_allowed=True))
+        db.add(DataPolicy(role_id=role.role_id, data_source_id=1, table_name="sales", access_level="read", aggregate_allowed=True))
         db.commit()
 
     admin = db.query(User).filter(User.email == "eval_job_admin@example.com").first()

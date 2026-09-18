@@ -67,10 +67,10 @@ A Trustworthy, High-Performance Natural-Language Analytics Platform with Determi
 ### 2. Universal Fail-Closed Security & Concurrency
 - **Deterministic AST Policy Gate**: Parses candidate SQL into SQLglot ASTs to enforce table and column RBAC, inject role-specific tenant filters, and reject non-SELECT operations with 0.00% bypass rate.
 - **Distributed Token Revocation**: Stateless JWT authorization backed by persistent DB revocation lookups and Redis distributed caches.
-- **Event-Loop Concurrency Protection**: Worker threadpool offloading (`anyio.to_thread`) for blocking CPU and database queries, maintaining bounded latencies under 100+ concurrent requests.
+- **Asynchronous Background Workers**: Persistent DB-tracked background jobs (`POST /api/lab/evaluation/jobs`) for long-running benchmark evaluations.
 
 ### 3. Truthful Empirical Evaluation & Observability
-- **165-Query Ground-Truth Benchmark**: Comprehensive test suite with PostgreSQL ground-truth SQL and expected behavior specifications.
+- **165-Query Evaluation Suite**: 100 executable SQL ground-truth queries + 65 adversarial, ambiguous, refusal, and safety boundary cases.
 - **Multiset Tuple Equality**: Float-tolerant ($\epsilon = 10^{-4}$) multiset tuple comparison eliminating string-matching biases.
 - **Zero Synthetic Telemetry**: All reliability scores, latency measurements, and execution traces are calculated dynamically from actual runtime telemetry.
 
@@ -78,19 +78,22 @@ A Trustworthy, High-Performance Natural-Language Analytics Platform with Determi
 
 ## 📚 Architecture Decision Records (ADRs)
 
-Detailed architectural trade-off evaluations and decisions are documented in [`docs/ADRs/`](docs/ADRs/):
+Detailed architectural trade-off evaluations and decisions are documented in [`docs/adr/`](docs/adr/):
 
-1. [**ADR-001: Deterministic AST Policy Engine vs. LLM Self-Policing**](docs/ADRs/ADR-001-deterministic-ast-policy-engine.md)
-2. [**ADR-002: Cost-Based Physical Join Order Optimizer (Bitmask DP & Greedy)**](docs/ADRs/ADR-002-cost-based-join-order-optimizer.md)
-3. [**ADR-003: Distributed Token Revocation via Key-Value Store & DB Fallback**](docs/ADRs/ADR-003-distributed-token-revocation-redis.md)
-4. [**ADR-004: Event-Loop Concurrency Isolation & Threadpool Offloading**](docs/ADRs/ADR-004-event-loop-concurrency-isolation.md)
-5. [**ADR-005: Ground-Truth Tuple-Equality Benchmarking vs. Surface String Comparison**](docs/ADRs/ADR-005-ground-truth-tuple-equality-evaluation.md)
+1. [**ADR-001: Deterministic Policy Boundary vs. LLM Self-Policing**](docs/adr/001-deterministic-policy-boundary.md)
+2. [**ADR-002: Read-Only Business Database Sandbox**](docs/adr/002-read-only-business-database.md)
+3. [**ADR-003: Bounded Self-Correction (Max 3 Retries, E5 Hard Gate)**](docs/adr/003-self-correction-limit.md)
+4. [**ADR-004: Query Cost & Runaway Join Admission Gate**](docs/adr/004-query-cost-gate.md)
+5. [**ADR-005: Redis for Shared State & Token Revocation**](docs/adr/005-redis-for-shared-state.md)
+6. [**ADR-006: Worker-Based Long-Running Evaluation Jobs**](docs/adr/006-worker-based-long-running-jobs.md)
+7. [**ADR-007: Object Storage Abstraction for Verifiable Reports**](docs/adr/007-object-storage-for-reports.md)
+8. [**ADR-008: Versioned Schema Snapshots for Deterministic Query Replay**](docs/adr/008-versioned-query-replay.md)
 
 ---
 
 ## 🧪 Verification & Automated Test Suite
 
-The platform is covered by **184 automated unit, integration, property, resilience, and load tests**:
+The platform is covered by **204 automated unit, integration, property, resilience, and load tests**:
 
 ```bash
 cd backend
@@ -98,11 +101,11 @@ pytest tests/ -v
 ```
 
 ### Test Coverage Breakdown:
-- **Unit Tests (104 passed)**: AST parser, policy enforcement with single-trip evaluation, join graph extraction, Bitmask DP states, greedy heuristics, priority queue join ordering, reliability scorer, and self-correction taxonomy (E1–E7).
-- **Integration Tests (62 passed)**: Full 165-query evaluation benchmark suite, 128-case adversarial security attack lab, RBAC boundaries, and schema introspection.
-- **Resilience & Failure Injection Tests (8 passed)**: Corrupted AST tokens, database connection drops, invalid query states, and fail-closed security invariants.
-- **Property-Based Tests (6 passed)**: Hypothesis randomized fuzzing for bitmask DP states, AST invariants, and non-SELECT rejection.
-- **Load & Concurrency Tests (4 passed)**: 10, 50, and 100 parallel concurrent request bursts measuring p50, p95, and p99 latency SLAs.
+- **Unit Tests (119 passing)**: AST parser, policy enforcement, join graph extraction, Bitmask DP states, greedy heuristics, priority queue join ordering, reliability scorer, and self-correction taxonomy (E1–E7).
+- **Integration Tests (67 passing)**: Full 165-query evaluation benchmark suite, 128-case adversarial security attack lab, RBAC boundaries, and schema introspection.
+- **Resilience & Failure Injection Tests (5 passing)**: Corrupted AST tokens, database connection drops, invalid query states, and fail-closed security invariants.
+- **Property-Based Tests (6 passing)**: Hypothesis randomized fuzzing for bitmask DP states, AST invariants, and non-SELECT rejection.
+- **Load & Concurrency Tests (4 passing)**: 10, 50, and 100 parallel concurrent request bursts measuring p50, p95, and p99 latency SLAs.
 
 ---
 
