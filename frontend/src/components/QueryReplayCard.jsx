@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
 
-export default function QueryReplayCard({ queryId, activeRoleId = 1, onBack }) {
+export default function QueryReplayCard({ queryId, activeRoleId = 1, dataSourceId = 1, onBack }) {
   const [provenance, setProvenance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -13,7 +13,7 @@ export default function QueryReplayCard({ queryId, activeRoleId = 1, onBack }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/replay/${qId}?data_source_id=1`);
+      const res = await apiFetch(`/api/replay/${qId}?data_source_id=${dataSourceId}`);
       const data = await res.json();
       if (data?.success) {
         setProvenance(data.data);
@@ -30,14 +30,14 @@ export default function QueryReplayCard({ queryId, activeRoleId = 1, onBack }) {
 
   useEffect(() => {
     fetchProvenance(queryId);
-  }, [queryId]);
+  }, [queryId, dataSourceId]);
 
   const handleExecuteReplay = async () => {
     if (!queryId) return;
     setReplaying(true);
     setReplayResult(null);
     try {
-      const res = await apiFetch(`/api/replay/${queryId}?role_id=${activeRoleId}&data_source_id=1`, {
+      const res = await apiFetch(`/api/replay/${queryId}?role_id=${activeRoleId}&data_source_id=${dataSourceId}`, {
         method: 'POST',
       });
       const data = await res.json();

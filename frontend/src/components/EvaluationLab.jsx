@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
 
-export default function EvaluationLab() {
+export default function EvaluationLab({ dataSourceId = 1 }) {
   const [isRunning, setIsRunning] = useState(false);
   const [evalData, setEvalData] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -10,11 +10,11 @@ export default function EvaluationLab() {
 
   useEffect(() => {
     fetchLatestEvaluationRun();
-  }, []);
+  }, [dataSourceId]);
 
   const fetchLatestEvaluationRun = async () => {
     try {
-      const res = await apiFetch('/api/lab/evaluation/latest');
+      const res = await apiFetch(`/api/lab/evaluation/latest?data_source_id=${dataSourceId}`);
       const data = await res.json();
       if (data.success && data.data && data.data.total_questions > 0) {
         setEvalData(data.data);
@@ -34,7 +34,7 @@ export default function EvaluationLab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data_source_id: 1,
+          data_source_id: dataSourceId,
         }),
       });
       const data = await res.json();

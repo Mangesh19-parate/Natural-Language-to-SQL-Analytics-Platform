@@ -9,6 +9,7 @@ export default function SQLProposalCard({
   question,
   roleId,
   resolvedQuestion,
+  dataSourceId = 1,
   onGenerateSuccess,
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -35,7 +36,7 @@ export default function SQLProposalCard({
         body: JSON.stringify({
           question: targetQuestion,
           role_id: roleId,
-          data_source_id: 1,
+          data_source_id: dataSourceId,
         }),
       });
       const data = await res.json();
@@ -66,7 +67,7 @@ export default function SQLProposalCard({
         body: JSON.stringify({
           sql: activeSql || sqlProposalData.proposal.sql,
           role_id: roleId,
-          data_source_id: 1,
+          data_source_id: dataSourceId,
           timeout_seconds: 10.0,
           max_rows: 10000,
           auto_correct: true,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
 
-export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activeRoleId = 1 }) {
+export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activeRoleId = 1, dataSourceId = 1 }) {
   const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -16,21 +16,21 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
     setLoading(true);
     setError(null);
     try {
-      let url = `/api/history?page=${page}&page_size=15`;
+      let url = `/api/history?page=${page}&page_size=15&data_source_id=${dataSourceId}`;
       if (statusFilter) url += `&status=${statusFilter}`;
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
 
       const res = await apiFetch(url);
       const data = await res.json();
       if (data?.success) {
-        setHistoryItems(data.data.items);
-        setTotalCount(data.data.total);
+        setHistoryItems(data.data.items || []);
+        setTotalCount(data.data.total_count || 0);
       } else {
-        setError(data?.detail || data?.message || 'Error fetching history');
+        setError(data?.detail || data?.message || 'Failed to load execution history');
       }
     } catch (err) {
       console.error('Failed to load history:', err);
-      setError(err.message || 'Error fetching history');
+      setError(err.message || 'Failed to load execution history');
     } finally {
       setLoading(false);
     }
@@ -38,7 +38,7 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
 
   useEffect(() => {
     fetchHistory();
-  }, [page, statusFilter]);
+  }, [page, statusFilter, dataSourceId]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -55,7 +55,7 @@ export default function QueryHistoryView({ onSelectQuery, onInspectReplay, activ
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role_id: activeRoleId,
-          data_source_id: 1,
+          data_source_id: dataSourceId,
         }),
       });
       const resData = await res.json();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
 
-export default function SecurityAttackLab({ selectedRole = 1 }) {
+export default function SecurityAttackLab({ selectedRole = 1, dataSourceId = 1 }) {
   const [isRunning, setIsRunning] = useState(false);
   const [attackData, setAttackData] = useState(null);
   const [selectedClass, setSelectedClass] = useState('ALL');
@@ -12,11 +12,11 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
   // Auto-fetch latest attack run on mount
   useEffect(() => {
     fetchLatestAttackRun();
-  }, []);
+  }, [dataSourceId]);
 
   const fetchLatestAttackRun = async () => {
     try {
-      const res = await apiFetch('/api/lab/security/latest');
+      const res = await apiFetch(`/api/lab/security/latest?data_source_id=${dataSourceId}`);
       const data = await res.json();
       if (data.success && data.data && data.data.total_attacks > 0 && data.data.status !== 'NOT_YET_RUN') {
         setAttackData(data.data);
@@ -36,7 +36,7 @@ export default function SecurityAttackLab({ selectedRole = 1 }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data_source_id: 1,
+          data_source_id: dataSourceId,
         }),
       });
       const data = await res.json();

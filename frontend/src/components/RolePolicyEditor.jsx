@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api.js';
 
-export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 1, onPolicyChange }) {
+export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 1, dataSourceId = 1, onPolicyChange }) {
   const [selectedRole, setSelectedRole] = useState(activeRoleId);
   const [matrixData, setMatrixData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/policy/matrix?role_id=${roleId}&data_source_id=1`);
+      const res = await apiFetch(`/api/policy/matrix?role_id=${roleId}&data_source_id=${dataSourceId}`);
       const data = await res.json();
       if (data?.success) {
         setMatrixData(data.data);
@@ -41,7 +41,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
 
   useEffect(() => {
     fetchMatrix(selectedRole);
-  }, [selectedRole]);
+  }, [selectedRole, dataSourceId]);
 
   const handleOpenEdit = (table, col = null) => {
     const isCol = col !== null;
@@ -66,7 +66,7 @@ export default function RolePolicyEditor({ activeRole = 'admin', activeRoleId = 
     try {
       const payload = {
         role_id: selectedRole,
-        data_source_id: 1,
+        data_source_id: dataSourceId,
         table_name: editingPolicy.table_name,
         column_name: editingPolicy.column_name,
         access_level: formAccessLevel,

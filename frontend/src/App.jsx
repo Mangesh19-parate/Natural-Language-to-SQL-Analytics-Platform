@@ -27,6 +27,7 @@ export default function App() {
     metadata_db_connected: true,
     business_db_connected: true,
     version: '1.2.0',
+  });
   const [selectedRole, setSelectedRole] = useState(() => {
     const saved = localStorage.getItem('auth_role_id');
     return saved ? Number(saved) : (localStorage.getItem('access_token') ? 1 : null);
@@ -35,6 +36,7 @@ export default function App() {
     const saved = localStorage.getItem('auth_role_name');
     return saved || (localStorage.getItem('access_token') ? 'admin' : 'Unauthenticated');
   });
+  const [selectedDataSourceId, setSelectedDataSourceId] = useState(1);
   const [activeUserEmail, setActiveUserEmail] = useState(() => localStorage.getItem('auth_user_email') || '');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(null);
@@ -47,28 +49,12 @@ export default function App() {
   const [resolvedQuestion, setResolvedQuestion] = useState(null);
   const [activeExecutionData, setActiveExecutionData] = useState(null);
 
-
   useEffect(() => {
     apiFetch('/api/health')
       .then((res) => res.json())
       .then((data) => setHealth(data))
       .catch(() => {});
   }, []);
-
-  const handleRoleSelectChange = (roleId) => {
-    setSelectedRole(roleId);
-    const rName = roleId === 1 ? 'admin' : roleId === 2 ? 'analyst' : 'viewer';
-    setSelectedRoleName(rName);
-    setActiveUserEmail(`${rName}@trustengine.ai`);
-    localStorage.setItem('auth_role_id', String(roleId));
-    localStorage.setItem('auth_role_name', rName);
-  };
-
-  const handleAuthSuccess = (user) => {
-    if (user.role_id) setSelectedRole(user.role_id);
-    if (user.role_name) setSelectedRoleName(user.role_name);
-    if (user.email) setActiveUserEmail(user.email);
-  };
 
   const handleExecuteStudioQuery = async (overrideQuestion) => {
     const q = overrideQuestion || queryInput;
@@ -87,7 +73,7 @@ export default function App() {
         body: JSON.stringify({
           question: q,
           role_id: selectedRole,
-          data_source_id: 1,
+          data_source_id: selectedDataSourceId,
         }),
       });
       const intentData = await intentRes.json();
@@ -104,7 +90,7 @@ export default function App() {
             body: JSON.stringify({
               question: result.resolved_question || q,
               role_id: selectedRole,
-              data_source_id: 1,
+              data_source_id: selectedDataSourceId,
             }),
           });
           const sqlData = await sqlRes.json();
@@ -121,7 +107,7 @@ export default function App() {
                 body: JSON.stringify({
                   sql: proposal.sql,
                   role_id: selectedRole,
-                  data_source_id: 1,
+                  data_source_id: selectedDataSourceId,
                   question: q,
                 }),
               });
@@ -280,6 +266,27 @@ export default function App() {
         </nav>
 
         <div className="telemetry-group">
+          {/* Data Source Selector */}
+          <select
+            value={selectedDataSourceId}
+            onChange={(e) => setSelectedDataSourceId(Number(e.target.value))}
+            style={{
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '4px',
+              padding: '0.25rem 0.5rem',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+            title="Active Data Source"
+          >
+            <option value={1}>DS #1: PostgreSQL Primary</option>
+            <option value={2}>DS #2: Read Replica</option>
+          </select>
+
           {/* Role selector */}
           <select
             value={selectedRole}
@@ -295,6 +302,7 @@ export default function App() {
               outline: 'none',
               cursor: 'pointer',
             }}
+            title="Active Role"
           >
             <option value={1}>Admin</option>
             <option value={2}>Analyst</option>
@@ -373,11 +381,13 @@ export default function App() {
           <PlannerAgentCard
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
 
         {activeTab === 'history' && (
           <QueryHistoryView
+            dataSourceId={selectedDataSourceId}
             onRerunQuery={(q) => {
               setQueryInput(q);
               setActiveTab('workspace');
@@ -402,6 +412,7 @@ export default function App() {
               initialQueryId={selectedReplayQueryId}
               selectedRole={selectedRole}
               selectedRoleName={selectedRoleName}
+              dataSourceId={selectedDataSourceId}
             />
           </div>
         )}
@@ -410,6 +421,7 @@ export default function App() {
           <RolePolicyEditor
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
 
@@ -417,6 +429,7 @@ export default function App() {
           <OptimizationCard
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
 
@@ -424,6 +437,7 @@ export default function App() {
           <SecurityAttackLab
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
 
@@ -431,6 +445,7 @@ export default function App() {
           <EvaluationLab
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
 
@@ -438,6 +453,7 @@ export default function App() {
           <FailureObservatory
             selectedRole={selectedRole}
             selectedRoleName={selectedRoleName}
+            dataSourceId={selectedDataSourceId}
           />
         )}
       </main>
