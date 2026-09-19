@@ -10,7 +10,7 @@ from app.schemas.intent import (
 )
 from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.semantic_catalog_service import SemanticCatalogService
-from app.services.query_classifier import QueryClassifierService
+from app.services.intent_analyzer import IntentAnalyzerService
 from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 
 router = APIRouter(prefix="/intent", tags=["Intent Analysis & Ambiguity"])
@@ -43,7 +43,7 @@ def classify_intent(
     except (ValueError, DataSourceUnavailableError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-    result = QueryClassifierService.classify_question(
+    result = IntentAnalyzerService.classify_question(
         question=request.question,
         catalog=catalog
     )
@@ -60,7 +60,7 @@ def resolve_intent(request: IntentResolveRequest):
     """
     POST /api/intent/resolve — Resolves ambiguous option selection into a concrete question.
     """
-    resolved_q = QueryClassifierService.resolve_ambiguity(
+    resolved_q = IntentAnalyzerService.resolve_ambiguity(
         original_question=request.original_question,
         selected_option=request.selected_option
     )

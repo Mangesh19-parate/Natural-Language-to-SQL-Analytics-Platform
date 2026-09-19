@@ -25,7 +25,7 @@ from app.services.self_correction import SelfCorrectionService
 from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
 from app.services.semantic_catalog_service import SemanticCatalogService
-from app.services.query_classifier import QueryClassifierService
+from app.services.intent_analyzer import IntentAnalyzerService
 from app.db.session import business_engine
 
 
@@ -353,7 +353,7 @@ class EvaluationLabService:
                 catalog = SemanticCatalogService.get_catalog_for_role(
                     db=db, data_source_id=data_source_id, role_id=bq.role_id, business_engine=business_engine
                 )
-                intent = QueryClassifierService.classify_question(bq.question, catalog)
+                intent = IntentAnalyzerService.classify_question(bq.question, catalog)
                 if intent.classification in ["unsupported", "unauthorized"] or bq.expected_behavior in ["UNSUPPORTED", "UNAUTHORIZED"]:
                     latency = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
                     return EvaluationResultItem(

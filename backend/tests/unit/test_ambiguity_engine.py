@@ -1,5 +1,5 @@
 import pytest
-from app.services.query_classifier import QueryClassifierService
+from app.services.intent_analyzer import IntentAnalyzerService
 from app.schemas.catalog import SemanticCatalogResponse, TableCatalogItem, ColumnCatalogItem
 from app.schemas.intent import IntentClassification
 
@@ -59,7 +59,7 @@ def test_ambiguity_detection_benchmark(full_catalog):
 
     ambiguity_detected_count = 0
     for q in ambiguous_test_set:
-        result = QueryClassifierService.classify_question(q, full_catalog)
+        result = IntentAnalyzerService.classify_question(q, full_catalog)
         if result.classification == IntentClassification.AMBIGUOUS:
             assert len(result.clarification_options) >= 2, f"Expected >=2 options for '{q}'"
             assert result.clarification_prompt is not None
@@ -82,6 +82,6 @@ def test_ambiguity_resolution():
         column_name="revenue",
         description="Calculates revenue based on sales table."
     )
-    resolved = QueryClassifierService.resolve_ambiguity("Show total revenue", selected_opt)
+    resolved = IntentAnalyzerService.resolve_ambiguity("Show total revenue", selected_opt)
     assert "sales.revenue" in resolved
     assert "Show total revenue" in resolved

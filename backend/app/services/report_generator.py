@@ -241,17 +241,14 @@ class ReportGeneratorService:
         content_hash = hashlib.sha256(pdf_bytes).hexdigest()
 
         # Persist through StorageService abstraction
-        self.storage.store_artifact(
+        stored_meta = self.storage.store_artifact(
             content=pdf_bytes,
             filename=file_name,
             content_type="application/pdf",
             prefix="reports",
         )
-        # Write to local cache path
-        with open(file_path, "wb") as f:
-            f.write(pdf_bytes)
 
-        return report_id, file_path, content_hash
+        return report_id, stored_meta["uri"], content_hash
 
     def generate_excel(self, request: ReportExportRequest, user_id: int = 1) -> Tuple[str, str, str]:
         """
@@ -391,43 +388,35 @@ class ReportGeneratorService:
         content_hash = hashlib.sha256(excel_bytes).hexdigest()
 
         # Persist through StorageService
-        self.storage.store_artifact(
+        stored_meta = self.storage.store_artifact(
             content=excel_bytes,
             filename=file_name,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             prefix="reports",
         )
-        # Write to local cache path
-        with open(file_path, "wb") as f:
-            f.write(excel_bytes)
 
-        return report_id, file_path, content_hash
+        return report_id, stored_meta["uri"], content_hash
 
     def get_report_file(self, report_id: str) -> Optional[Tuple[str, str]]:
         """
         Locates a report file on disk or storage and returns (file_path, media_type).
         """
-        pdf_path = os.path.join(self.reports_dir, f"report_{report_id}.pdf")
-        if os.path.exists(pdf_path):
-            return pdf_path, "application/pdf"
-
-        xlsx_path = os.path.join(self.reports_dir, f"report_{report_id}.xlsx")
-        if os.path.exists(xlsx_path):
-            return xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-        # Check storage service artifacts
         pdf_key = f"reports/report_{report_id}.pdf"
         pdf_bytes = self.storage.retrieve_artifact(pdf_key)
-        if pdf_bytes:
-            with open(pdf_path, "wb") as f:
-                f.write(pdf_bytes)
-            return pdf_path, "application/pdf"
+        if pdf_bytes is not None:
+            local_path = os.path.join(self.reports_dir, f"report_{report_id}.pdf")
+            if not os.path.exists(local_path):
+                with open(local_path, "wb") as f:
+                    f.write(pdf_bytes)
+            return local_path, "application/pdf"
 
         xlsx_key = f"reports/report_{report_id}.xlsx"
         xlsx_bytes = self.storage.retrieve_artifact(xlsx_key)
-        if xlsx_bytes:
-            with open(xlsx_path, "wb") as f:
-                f.write(xlsx_bytes)
-            return xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if xlsx_bytes is not None:
+            local_path = os.path.join(self.reports_dir, f"report_{report_id}.xlsx")
+            if not os.path.exists(local_path):
+                with open(local_path, "wb") as f:
+                    f.write(xlsx_bytes)
+            return local_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         return None

@@ -16,7 +16,7 @@ from app.schemas.lab import (
 from app.schemas.intent import IntentClassification
 from app.services.sql_parser import SQLASTParser
 from app.services.policy_engine import PolicyEngine
-from app.services.query_classifier import QueryClassifierService
+from app.services.intent_analyzer import IntentAnalyzerService
 from app.services.semantic_catalog_service import SemanticCatalogService
 
 
@@ -424,7 +424,7 @@ class SecurityAttackLabService:
                 catalog = SemanticCatalogService.get_catalog_for_role(
                     db=db, data_source_id=data_source_id, role_id=atk.target_role_id
                 )
-                intent_res = QueryClassifierService.classify_question(
+                intent_res = IntentAnalyzerService.classify_question(
                     question=atk.input_payload,
                     catalog=catalog,
                 )

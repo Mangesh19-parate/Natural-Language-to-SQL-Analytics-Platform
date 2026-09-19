@@ -1,6 +1,5 @@
 import pytest
 from app.services.intent_analyzer import IntentAnalyzerService
-from app.services.query_classifier import QueryClassifierService
 from app.schemas.catalog import SemanticCatalogResponse, TableCatalogItem, ColumnCatalogItem
 from app.schemas.intent import IntentClassification
 
@@ -82,7 +81,7 @@ def test_unsupported_detection_10_cases(full_admin_catalog):
 
     refused_count = 0
     for q in impossible_questions:
-        result = QueryClassifierService.classify_question(q, full_admin_catalog)
+        result = IntentAnalyzerService.classify_question(q, full_admin_catalog)
         if result.classification == IntentClassification.UNSUPPORTED and result.evidence_gap:
             refused_count += 1
 
@@ -96,18 +95,18 @@ def test_unauthorized_precheck(restricted_analyst_catalog):
     """
     # 1. Analyst attempting to access restricted table 'employees'
     q1 = "How many employees are currently active in our workforce?"
-    res1 = QueryClassifierService.classify_question(q1, restricted_analyst_catalog)
+    res1 = IntentAnalyzerService.classify_question(q1, restricted_analyst_catalog)
     assert res1.classification == IntentClassification.UNAUTHORIZED
     assert "employees" in res1.reasoning.lower()
 
     # 2. Analyst attempting to query sensitive salary data
     q2 = "Show the average employee salary by department"
-    res2 = QueryClassifierService.classify_question(q2, restricted_analyst_catalog)
+    res2 = IntentAnalyzerService.classify_question(q2, restricted_analyst_catalog)
     assert res2.classification == IntentClassification.UNAUTHORIZED
 
     # 3. Unconfigured Viewer with 0 accessible tables
     empty_catalog = SemanticCatalogResponse(data_source_id=1, data_source_name="DB", tables=[])
-    res3 = QueryClassifierService.classify_question("Show all products", empty_catalog)
+    res3 = IntentAnalyzerService.classify_question("Show all products", empty_catalog)
     assert res3.classification == IntentClassification.UNAUTHORIZED
 
 
@@ -116,7 +115,7 @@ def test_answerable_question(full_admin_catalog):
     Verifies that a clear, unambiguous, authorized question is classified as Answerable.
     """
     q = "List all products in the catalog with their price"
-    res = QueryClassifierService.classify_question(q, full_admin_catalog)
+    res = IntentAnalyzerService.classify_question(q, full_admin_catalog)
     assert res.classification == IntentClassification.ANSWERABLE
     assert res.confidence == 1.0
     assert res.resolved_question == q

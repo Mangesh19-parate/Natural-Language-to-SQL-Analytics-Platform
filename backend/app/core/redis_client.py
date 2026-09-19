@@ -1,6 +1,7 @@
 import time
 import json
 import logging
+from collections import deque
 from typing import Optional, Dict, Any, List
 import redis
 from app.config import settings
@@ -121,24 +122,21 @@ class RedisService:
     end
     """
 
-    _local_rate_limits: Dict[str, List[float]] = {}
+    _local_rate_limits: Dict[str, deque] = {}
 
     def _check_local_rate_limit(self, identifier: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
-        """In-memory sliding-window fallback when Redis is unavailable (Fail-Safe Degraded Mode)."""
+        """In-memory sliding-window fallback using deque for O(1) timestamp pruning."""
         now = time.time()
         cutoff = now - window_seconds
         
-        # Clean expired timestamps
-        timestamps = self._local_rate_limits.setdefault(identifier, [])
-        self._local_rate_limits[identifier] = [t for t in timestamps if t > cutoff]
-        current_reqs = len(self._local_rate_limits[identifier])
+        q = self._local_rate_limits.setdefault(identifier, deque())
+        while q and q[0] <= cutoff:
+            q.popleft()
 
-        if current_reqs < limit:
-            self._local_rate_limits[identifier].append(now)
-            remaining = limit - current_reqs - 1
-            return True, remaining, window_seconds
-        else:
-            return False, 0, window_seconds
+        if len(q) < limit:
+            q.append(now)
+            return True, limit - len(q), window_seconds
+        return False, 0, window_seconds
 
     def check_rate_limit(self, identifier: str, limit: int = 60, window_seconds: int = 60) -> tuple[bool, int, int]:
         """

@@ -1,6 +1,6 @@
 import json
 import re
-from collections import deque
+import graphlib
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ class DAGValidationError(Exception):
 class DAGValidator:
     """
     STRICT ANALYTICAL DAG VALIDATOR (Rule R6.1 / Task T-44).
-    Validates analytical query decomposition DAGs using Kahn's topological sort.
+    Validates analytical query decomposition DAGs using stdlib graphlib.TopologicalSorter.
     """
 
     @classmethod
@@ -30,9 +30,8 @@ class DAGValidator:
         if len(step_ids) != len(sub_tasks):
             raise DAGValidationError("Duplicate step_ids detected in DAG definition.")
 
-        in_degree: Dict[int, int] = {task.step_id: 0 for task in sub_tasks}
-        adj_list: Dict[int, List[int]] = {task.step_id: [] for task in sub_tasks}
         task_map: Dict[int, PlanSubTask] = {task.step_id: task for task in sub_tasks}
+        graph: Dict[int, set] = {}
 
         for task in sub_tasks:
             for dep_id in task.dependencies:
@@ -42,27 +41,13 @@ class DAGValidator:
                     )
                 if dep_id == task.step_id:
                     raise DAGValidationError(f"Step {task.step_id} has a self-referential dependency.")
-                adj_list[dep_id].append(task.step_id)
-                in_degree[task.step_id] += 1
+            graph[task.step_id] = set(task.dependencies)
 
-        queue: deque[int] = deque([step_id for step_id, deg in in_degree.items() if deg == 0])
-        topological_order: List[PlanSubTask] = []
-
-        while queue:
-            curr = queue.popleft()
-            topological_order.append(task_map[curr])
-
-            for neighbor in adj_list[curr]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
-
-        if len(topological_order) != len(sub_tasks):
-            raise DAGValidationError(
-                "Cyclic dependency detected in Analytical DAG. Execution rejected by DAG safety gate."
-            )
-
-        return topological_order
+        try:
+            ts = graphlib.TopologicalSorter(graph)
+            return [task_map[step_id] for step_id in ts.static_order()]
+        except graphlib.CycleError as e:
+            raise DAGValidationError(f"Cyclic dependency detected in Analytical DAG: {e}") from e
 
 
 class DAGPlannerService:

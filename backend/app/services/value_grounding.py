@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
@@ -37,11 +38,11 @@ class ValueGroundingService:
         if norm_semantic_type != "categorical":
             return None
 
-        # Sanitize identifiers against injection
-        clean_table = table_name.replace('"', '').replace("'", "").replace(";", "").strip()
-        clean_column = column_name.replace('"', '').replace("'", "").replace(";", "").strip()
+        # Validate valid SQL identifier format
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name) or not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", column_name):
+            return None
 
-        query_str = f'SELECT DISTINCT "{clean_column}" FROM "{clean_table}" WHERE "{clean_column}" IS NOT NULL LIMIT {max_examples}'
+        query_str = f'SELECT DISTINCT "{column_name}" FROM "{table_name}" WHERE "{column_name}" IS NOT NULL LIMIT {max_examples}'
         
         try:
             with engine.connect() as conn:
