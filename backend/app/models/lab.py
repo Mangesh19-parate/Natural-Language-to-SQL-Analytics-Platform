@@ -83,11 +83,14 @@ class EvaluationJob(Base):
     __tablename__ = "evaluation_jobs"
 
     job_id = Column(String(36), primary_key=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True, index=True)
     status = Column(String(30), nullable=False, default="pending")  # 'pending', 'running', 'completed', 'failed'
     progress_pct = Column(Numeric(5, 2), default=0.0)
     error = Column(Text, nullable=True)
     result_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", foreign_keys=[created_by_user_id])
 
 

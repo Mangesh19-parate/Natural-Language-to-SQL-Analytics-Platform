@@ -51,18 +51,37 @@ class ExecutionSandboxService:
         max_rows = min(int(raw_rows), cls.HARD_ROW_CEILING)
         start_time = time.time()
         cleaned_sql = sql.strip().rstrip(";")
+        dialect_name = engine.dialect.name
+        target_sql = cleaned_sql
+        if dialect_name == "sqlite":
+            import re
+            def _replace_extract(m):
+                part = m.group(1).upper()
+                col = m.group(2).strip()
+                if part in ["YEAR", "YYYY"]:
+                    return f"CAST(strftime('%Y', {col}) AS INTEGER)"
+                elif part in ["MONTH", "MM"]:
+                    return f"CAST(strftime('%m', {col}) AS INTEGER)"
+                elif part in ["DOW", "DAY"]:
+                    return f"CAST(strftime('%w', {col}) AS INTEGER)"
+                elif part == "QUARTER":
+                    return f"((CAST(strftime('%m', {col}) AS INTEGER) - 1) / 3 + 1)"
+                return m.group(0)
+
+            target_sql = re.sub(r"EXTRACT\s*\(\s*(\w+)\s+FROM\s+([^)]+)\)", _replace_extract, target_sql, flags=re.IGNORECASE)
+            target_sql = re.sub(r"CURRENT_DATE\s*-\s*INTERVAL\s*'(\d+)\s*months?'", r"date('now', '-\1 months')", target_sql, flags=re.IGNORECASE)
+            target_sql = re.sub(r"CURRENT_DATE\s*-\s*INTERVAL\s*'(\d+)\s*years?'", r"date('now', '-\1 years')", target_sql, flags=re.IGNORECASE)
 
         try:
             with engine.connect() as conn:
                 # Set statement timeout based on dialect if supported
-                dialect_name = engine.dialect.name
                 if dialect_name == "postgresql":
                     conn.execute(text(f"SET statement_timeout = {int(timeout * 1000)}"))
                 elif dialect_name == "mysql":
                     conn.execute(text(f"SET max_execution_time = {int(timeout * 1000)}"))
 
                 # Execute statement
-                result_proxy = conn.execute(text(cleaned_sql))
+                result_proxy = conn.execute(text(target_sql))
                 
                 if not result_proxy.returns_rows:
                     latency_ms = int((time.time() - start_time) * 1000)

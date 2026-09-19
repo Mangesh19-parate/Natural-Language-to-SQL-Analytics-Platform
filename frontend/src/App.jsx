@@ -27,9 +27,14 @@ export default function App() {
     metadata_db_connected: true,
     business_db_connected: true,
     version: '1.2.0',
+  const [selectedRole, setSelectedRole] = useState(() => {
+    const saved = localStorage.getItem('auth_role_id');
+    return saved ? Number(saved) : (localStorage.getItem('access_token') ? 1 : null);
   });
-  const [selectedRole, setSelectedRole] = useState(() => Number(localStorage.getItem('auth_role_id')) || 1);
-  const [selectedRoleName, setSelectedRoleName] = useState(() => localStorage.getItem('auth_role_name') || 'admin');
+  const [selectedRoleName, setSelectedRoleName] = useState(() => {
+    const saved = localStorage.getItem('auth_role_name');
+    return saved || (localStorage.getItem('access_token') ? 'admin' : 'Unauthenticated');
+  });
   const [activeUserEmail, setActiveUserEmail] = useState(() => localStorage.getItem('auth_user_email') || '');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(null);
@@ -174,6 +179,29 @@ export default function App() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleRoleSelectChange = (roleId) => {
+    const roleNames = { 1: 'admin', 2: 'analyst', 3: 'viewer' };
+    const name = roleNames[roleId] || 'viewer';
+    setSelectedRole(roleId);
+    setSelectedRoleName(name);
+    localStorage.setItem('auth_role_id', String(roleId));
+    localStorage.setItem('auth_role_name', name);
+  };
+
+  const handleAuthSuccess = (userData, accessToken) => {
+    if (userData) {
+      setActiveUserEmail(userData.email || '');
+      const rId = userData.role_id || 1;
+      const rName = userData.role?.role_name || (rId === 1 ? 'admin' : rId === 2 ? 'analyst' : 'viewer');
+      setSelectedRole(rId);
+      setSelectedRoleName(rName);
+      localStorage.setItem('auth_role_id', String(rId));
+      localStorage.setItem('auth_role_name', rName);
+      localStorage.setItem('auth_user_email', userData.email || '');
+    }
+    setIsAuthModalOpen(false);
   };
 
   const handleInspectReplay = (queryId) => {
@@ -419,9 +447,8 @@ export default function App() {
         <AuthModal
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
-          onSuccess={handleAuthSuccess}
-          activeUserEmail={activeUserEmail}
-          activeRoleName={selectedRoleName}
+          onAuthSuccess={handleAuthSuccess}
+          currentRole={selectedRoleName}
         />
       )}
     </div>

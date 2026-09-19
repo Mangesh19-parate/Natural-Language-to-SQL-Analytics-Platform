@@ -11,6 +11,7 @@ from app.schemas.agent import (
 from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
+from app.services.data_source_manager import DataSourceManager
 from app.db.session import business_engine
 
 
@@ -53,7 +54,7 @@ class PlannerAgentService:
                     step_id=1,
                     task_name=f"Extract {y1} Baseline Metrics",
                     description=f"Query aggregate revenue and order volumes for calendar year {y1}",
-                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE strftime('%Y', order_date) = '{y1}'",
+                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE EXTRACT(YEAR FROM order_date) = {y1}",
                     dependencies=[],
                 )
             )
@@ -62,7 +63,7 @@ class PlannerAgentService:
                     step_id=2,
                     task_name=f"Extract {y2} Comparison Metrics",
                     description=f"Query aggregate revenue and order volumes for calendar year {y2}",
-                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE strftime('%Y', order_date) = '{y2}'",
+                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE EXTRACT(YEAR FROM order_date) = {y2}",
                     dependencies=[],
                 )
             )
@@ -283,6 +284,7 @@ class PlannerAgentService:
         step_results: List[PlanStepResult] = []
         all_authorized = True
         overall_status = "COMPLETED"
+        target_engine = DataSourceManager.get_engine(db, data_source_id=data_source_id)
 
         for task in sub_tasks:
             step_start = time.time()
@@ -333,7 +335,7 @@ class PlannerAgentService:
             # 3. Execute in Sandbox
             final_sql = policy_res.injected_sql or raw_sql
             sandbox_res = ExecutionSandboxService.execute_query(
-                engine=business_engine,
+                engine=target_engine,
                 sql=final_sql,
                 timeout_seconds=5.0,
                 max_rows=100,

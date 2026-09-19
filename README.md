@@ -93,7 +93,7 @@ Detailed architectural trade-off evaluations and decisions are documented in [`d
 
 ## 🧪 Verification & Automated Test Suite
 
-The platform is covered by **204 automated unit, integration, property, resilience, and load tests**:
+The platform is covered by **206 automated unit, integration, property, resilience, and load tests**:
 
 ```bash
 cd backend

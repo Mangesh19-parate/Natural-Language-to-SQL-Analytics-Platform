@@ -19,5 +19,7 @@ openpyxl>=3.1.0
 faker>=25.0.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
+hypothesis>=6.100.0
+locust>=2.20.0
 sqlglot>=25.0.0
 redis>=5.0.0

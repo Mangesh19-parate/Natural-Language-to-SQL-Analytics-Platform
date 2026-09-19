@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.services.evaluation_lab import EvaluationLabService
+from app.services.execution_sandbox import ExecutionSandboxService
 from app.schemas.lab import BaselineVariantType, BenchmarkQuestion
 from app.models.policy import DataSource, SemanticCatalog, DataPolicy
 from app.models.auth import Role
@@ -62,13 +63,12 @@ def test_benchmark_questions_compilation():
 
 
 def test_all_ground_truth_queries_execute_cleanly():
-    """Verify that all 100 safe ground truth SQL queries execute with 0 syntax or runtime errors on SQLite."""
+    """Verify that all 100 safe ground truth SQL queries execute with 0 syntax or runtime errors."""
     questions = EvaluationLabService.get_benchmark_questions(full_suite=True)
-    with business_engine.connect() as conn:
-        for q in questions:
-            if q.ground_truth_sql:
-                result = conn.execute(text(q.ground_truth_sql))
-                assert result is not None, f"Query {q.question_id} execution returned None"
+    for q in questions:
+        if q.ground_truth_sql:
+            res = ExecutionSandboxService.execute_query(business_engine, q.ground_truth_sql)
+            assert res.success is True, f"Query {q.question_id} execution failed: {res.error}"
 
 
 def test_compare_results_column_identity_preservation():

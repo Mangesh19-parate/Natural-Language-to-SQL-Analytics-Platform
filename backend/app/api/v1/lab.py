@@ -74,6 +74,7 @@ def enqueue_evaluation_job(
     job_id = EvaluationLabService.submit_benchmark_job(
         db_factory=_get_db_session,
         request=request,
+        created_by_user_id=current_user.user_id,
     )
     return EvaluationJobAcceptedResponse(
         job_id=job_id,
@@ -95,6 +96,7 @@ def get_evaluation_job_status(
 ):
     """
     Polls the execution status and output results of an asynchronous benchmark job.
+    Enforces IDOR ownership protection (owner or admin only).
     """
     job_record = EvaluationLabService.get_job_status(job_id, db=db)
     if not job_record:
@@ -102,8 +104,26 @@ def get_evaluation_job_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Evaluation job '{job_id}' not found.",
         )
+
+    # IDOR Access Control: Admins or Job Creator only
+    user_role_name = getattr(current_user.role, "role_name", "") if current_user.role else ""
+    if not user_role_name and current_user.role_id and db:
+        from app.models.auth import Role
+        r = db.query(Role).filter(Role.role_id == current_user.role_id).first()
+        if r:
+            user_role_name = r.role_name
+
+    is_admin = user_role_name.lower() == "admin"
+    job_creator_id = job_record.get("created_by_user_id")
+    if not is_admin and job_creator_id is not None and job_creator_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to view this benchmark job.",
+        )
+
     return EvaluationJobStatusResponse(
         job_id=job_record["job_id"],
+        created_by_user_id=job_record.get("created_by_user_id"),
         status=job_record["status"],
         progress_pct=job_record.get("progress_pct", 0.0),
         error=job_record.get("error"),

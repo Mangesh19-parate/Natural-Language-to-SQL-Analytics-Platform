@@ -26,6 +26,7 @@ from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
 from app.services.semantic_catalog_service import SemanticCatalogService
 from app.services.intent_analyzer import IntentAnalyzerService
+from app.services.data_source_manager import DataSourceManager
 from app.db.session import business_engine
 
 
@@ -69,18 +70,18 @@ class EvaluationLabService:
             BenchmarkQuestion(question_id="Q-020", question="Show sales quantities greater than 5 units", category="simple", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT sale_id, quantity FROM sales WHERE quantity > 5;"),
 
             # 2. Temporal (15 questions - Cross-dialect portable SQL)
-            BenchmarkQuestion(question_id="Q-021", question="What were the total sales in 2025?", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT SUM(s.revenue) AS total_sales FROM sales s JOIN orders o ON s.order_id = o.order_id WHERE strftime('%Y', o.order_date) = '2025';"),
+            BenchmarkQuestion(question_id="Q-021", question="What were the total sales in 2025?", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT SUM(s.revenue) AS total_sales FROM sales s JOIN orders o ON s.order_id = o.order_id WHERE EXTRACT(YEAR FROM o.order_date) = 2025;"),
             BenchmarkQuestion(question_id="Q-022", question="Show employee hire dates sorted by newest first", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["employees"], is_safe=True, ground_truth_sql="SELECT first_name, last_name, hire_date FROM employees ORDER BY hire_date DESC;"),
-            BenchmarkQuestion(question_id="Q-023", question="List orders placed in the last 6 months", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, order_date, total_amount FROM orders WHERE order_date >= date('now', '-6 months');"),
+            BenchmarkQuestion(question_id="Q-023", question="List orders placed in the last 6 months", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, order_date, total_amount FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '6 months';"),
             BenchmarkQuestion(question_id="Q-024", question="Show orders placed between January and March 2025", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, order_date, total_amount FROM orders WHERE order_date BETWEEN '2025-01-01' AND '2025-03-31';"),
             BenchmarkQuestion(question_id="Q-025", question="List employees hired after 2023-01-01", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["employees"], is_safe=True, ground_truth_sql="SELECT first_name, last_name, hire_date FROM employees WHERE hire_date > '2023-01-01';"),
             BenchmarkQuestion(question_id="Q-026", question="Show total revenue generated in Q4 2024", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT SUM(s.revenue) AS total_revenue FROM sales s JOIN orders o ON s.order_id = o.order_id WHERE o.order_date BETWEEN '2024-10-01' AND '2024-12-31';"),
-            BenchmarkQuestion(question_id="Q-027", question="Find orders placed on weekends", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, order_date, total_amount FROM orders WHERE cast(strftime('%w', order_date) as integer) IN (0, 6);"),
+            BenchmarkQuestion(question_id="Q-027", question="Find orders placed on weekends", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, order_date, total_amount FROM orders WHERE EXTRACT(DOW FROM order_date) IN (0, 6);"),
             BenchmarkQuestion(question_id="Q-028", question="List sales records sorted by order date descending", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["sales", "orders"], is_safe=True, ground_truth_sql="SELECT s.sale_id, o.order_date, s.revenue FROM sales s JOIN orders o ON s.order_id = o.order_id ORDER BY o.order_date DESC;"),
-            BenchmarkQuestion(question_id="Q-029", question="Show customer order frequency by month in 2025", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT strftime('%m', order_date) AS order_month, COUNT(*) AS order_count FROM orders WHERE strftime('%Y', order_date) = '2025' GROUP BY strftime('%m', order_date) ORDER BY order_month;"),
-            BenchmarkQuestion(question_id="Q-030", question="Find employees with tenure greater than 3 years", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["employees"], is_safe=True, ground_truth_sql="SELECT first_name, last_name, hire_date FROM employees WHERE hire_date <= date('now', '-3 years');"),
-            BenchmarkQuestion(question_id="Q-031", question="Show total orders placed per quarter", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT strftime('%Y', order_date) AS order_year, ((cast(strftime('%m', order_date) as integer) - 1) / 3 + 1) AS order_quarter, COUNT(*) AS order_count FROM orders GROUP BY order_year, order_quarter ORDER BY order_year, order_quarter;"),
-            BenchmarkQuestion(question_id="Q-032", question="List products launched or sold in 2024", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["products", "sales"], is_safe=True, ground_truth_sql="SELECT DISTINCT p.product_name FROM products p JOIN sales s ON p.product_id = s.product_id JOIN orders o ON s.order_id = o.order_id WHERE strftime('%Y', o.order_date) = '2024';"),
+            BenchmarkQuestion(question_id="Q-029", question="Show customer order frequency by month in 2025", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT EXTRACT(MONTH FROM order_date) AS order_month, COUNT(*) AS order_count FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2025 GROUP BY EXTRACT(MONTH FROM order_date) ORDER BY order_month;"),
+            BenchmarkQuestion(question_id="Q-030", question="Find employees with tenure greater than 3 years", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["employees"], is_safe=True, ground_truth_sql="SELECT first_name, last_name, hire_date FROM employees WHERE hire_date <= CURRENT_DATE - INTERVAL '3 years';"),
+            BenchmarkQuestion(question_id="Q-031", question="Show total orders placed per quarter", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT EXTRACT(YEAR FROM order_date) AS order_year, EXTRACT(QUARTER FROM order_date) AS order_quarter, COUNT(*) AS order_count FROM orders GROUP BY order_year, order_quarter ORDER BY order_year, order_quarter;"),
+            BenchmarkQuestion(question_id="Q-032", question="List products launched or sold in 2024", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["products", "sales"], is_safe=True, ground_truth_sql="SELECT DISTINCT p.product_name FROM products p JOIN sales s ON p.product_id = s.product_id JOIN orders o ON s.order_id = o.order_id WHERE EXTRACT(YEAR FROM o.order_date) = 2024;"),
             BenchmarkQuestion(question_id="Q-033", question="Show daily revenue totals for July 2025", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["sales", "orders"], is_safe=True, ground_truth_sql="SELECT o.order_date, SUM(s.revenue) AS daily_revenue FROM sales s JOIN orders o ON s.order_id = o.order_id WHERE o.order_date BETWEEN '2025-07-01' AND '2025-07-31' GROUP BY o.order_date ORDER BY o.order_date;"),
             BenchmarkQuestion(question_id="Q-034", question="Find the earliest customer order date in the database", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT MIN(order_date) AS earliest_order_date FROM orders;"),
             BenchmarkQuestion(question_id="Q-035", question="Show latest hired employee in Engineering department", category="temporal", role_id=1, expected_behavior="ANSWER", expected_tables=["employees", "departments"], is_safe=True, ground_truth_sql="SELECT e.first_name, e.last_name, e.hire_date FROM employees e JOIN departments d ON e.department_id = d.department_id WHERE d.department_name = 'Engineering' ORDER BY e.hire_date DESC LIMIT 1;"),
@@ -117,7 +118,7 @@ class EvaluationLabService:
             BenchmarkQuestion(question_id="Q-062", question="Show departments that have more than 10 employees", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["departments", "employees"], is_safe=True, ground_truth_sql="SELECT d.department_name, COUNT(e.employee_id) AS emp_count FROM departments d JOIN employees e ON d.department_id = e.department_id GROUP BY d.department_name HAVING COUNT(e.employee_id) > 10;"),
             BenchmarkQuestion(question_id="Q-063", question="List orders that contain the most expensive product in the catalog", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["orders", "sales", "products"], is_safe=True, ground_truth_sql="SELECT DISTINCT s.order_id FROM sales s WHERE s.product_id = (SELECT product_id FROM products ORDER BY price DESC LIMIT 1);"),
             BenchmarkQuestion(question_id="Q-064", question="Find the second highest order amount in the orders table", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT DISTINCT total_amount FROM orders ORDER BY total_amount DESC LIMIT 1 OFFSET 1;"),
-            BenchmarkQuestion(question_id="Q-065", question="Show customers who made orders in both 2024 and 2025", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["customers", "orders"], is_safe=True, ground_truth_sql="SELECT customer_id FROM orders WHERE strftime('%Y', order_date) = '2024' INTERSECT SELECT customer_id FROM orders WHERE strftime('%Y', order_date) = '2025';"),
+            BenchmarkQuestion(question_id="Q-065", question="Show customers who made orders in both 2024 and 2025", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["customers", "orders"], is_safe=True, ground_truth_sql="SELECT customer_id FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2024 INTERSECT SELECT customer_id FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2025;"),
             BenchmarkQuestion(question_id="Q-066", question="List products whose price is above the 90th percentile of catalog prices", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["products"], is_safe=True, ground_truth_sql="SELECT p.product_name, p.price FROM products p WHERE p.price > (SELECT price FROM products ORDER BY price ASC LIMIT 1 OFFSET cast((SELECT COUNT(*) * 0.9 FROM products) as integer));"),
             BenchmarkQuestion(question_id="Q-067", question="Show department with the minimum average employee salary", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["departments", "employees"], is_safe=True, ground_truth_sql="SELECT d.department_name, AVG(e.salary) AS avg_sal FROM departments d JOIN employees e ON d.department_id = e.department_id GROUP BY d.department_name ORDER BY avg_sal ASC LIMIT 1;"),
             BenchmarkQuestion(question_id="Q-068", question="Find orders whose total amount is greater than the average order amount", category="nested", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT order_id, total_amount FROM orders WHERE total_amount > (SELECT AVG(total_amount) FROM orders);"),
@@ -205,13 +206,13 @@ class EvaluationLabService:
             BenchmarkQuestion(question_id="Q-140", question="Calculate rolling 30-day cumulative revenue", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT order_date, SUM(total_amount) OVER (ORDER BY order_date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS rolling_rev FROM orders;"),
             BenchmarkQuestion(question_id="Q-141", question="Join customers, orders, and sales with multi-column group by", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["customers", "orders", "sales"], is_safe=True, ground_truth_sql="SELECT c.city, p.category, SUM(s.revenue) AS total_rev FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN sales s ON o.order_id = s.order_id JOIN products p ON s.product_id = p.product_id GROUP BY c.city, p.category;"),
             BenchmarkQuestion(question_id="Q-142", question="Find variance of order total amounts", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT ROUND(AVG((total_amount - sub.avg_val) * (total_amount - sub.avg_val)), 2) AS variance_amount FROM orders, (SELECT AVG(total_amount) AS avg_val FROM orders) sub;"),
-            BenchmarkQuestion(question_id="Q-143", question="Aggregate sales summary by year, month, and product category", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales", "products"], is_safe=True, ground_truth_sql="SELECT strftime('%Y', o.order_date) AS yr, strftime('%m', o.order_date) AS mo, p.category, SUM(s.revenue) AS rev FROM orders o JOIN sales s ON o.order_id = s.order_id JOIN products p ON s.product_id = p.product_id GROUP BY yr, mo, p.category;"),
+            BenchmarkQuestion(question_id="Q-143", question="Aggregate sales summary by year, month, and product category", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales", "products"], is_safe=True, ground_truth_sql="SELECT EXTRACT(YEAR FROM o.order_date) AS yr, EXTRACT(MONTH FROM o.order_date) AS mo, p.category, SUM(s.revenue) AS rev FROM orders o JOIN sales s ON o.order_id = s.order_id JOIN products p ON s.product_id = p.product_id GROUP BY yr, mo, p.category;"),
             BenchmarkQuestion(question_id="Q-144", question="Calculate average customer lifetime value across all active accounts", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["customers", "orders"], is_safe=True, ground_truth_sql="SELECT AVG(total_spent) AS avg_clv FROM customers;"),
             BenchmarkQuestion(question_id="Q-145", question="Perform multi-level aggregation of revenue by department and employee", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["departments", "employees"], is_safe=True, ground_truth_sql="SELECT d.department_name, e.first_name, e.last_name, SUM(s.revenue) AS total_rev FROM departments d JOIN employees e ON d.department_id = e.department_id JOIN orders o ON e.employee_id = o.customer_id JOIN sales s ON o.order_id = s.order_id GROUP BY d.department_name, e.first_name, e.last_name;"),
             BenchmarkQuestion(question_id="Q-146", question="Find median order value in the historical orders dataset", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["orders"], is_safe=True, ground_truth_sql="SELECT total_amount AS median_amount FROM orders ORDER BY total_amount ASC LIMIT 1 OFFSET (SELECT COUNT(*) / 2 FROM orders);"),
             BenchmarkQuestion(question_id="Q-147", question="Group sales by product and order date with HAVING sum(revenue) > 5000", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT s.product_id, o.order_date, SUM(s.revenue) AS tot_rev FROM sales s JOIN orders o ON s.order_id = o.order_id GROUP BY s.product_id, o.order_date HAVING SUM(s.revenue) > 5000;"),
             BenchmarkQuestion(question_id="Q-148", question="Scan customer order history with multiple string filter predicates", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["customers", "orders"], is_safe=True, ground_truth_sql="SELECT c.customer_name, c.city, o.total_amount FROM customers c JOIN orders o ON c.customer_id = o.customer_id WHERE c.city IN ('New York', 'London') AND c.customer_name LIKE '%a%';"),
-            BenchmarkQuestion(question_id="Q-149", question="Calculate year-over-year revenue percentage growth", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT strftime('%Y', o.order_date) AS yr, SUM(s.revenue) AS yr_rev FROM orders o JOIN sales s ON o.order_id = s.order_id GROUP BY yr ORDER BY yr;"),
+            BenchmarkQuestion(question_id="Q-149", question="Calculate year-over-year revenue percentage growth", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales"], is_safe=True, ground_truth_sql="SELECT EXTRACT(YEAR FROM o.order_date) AS yr, SUM(s.revenue) AS yr_rev FROM orders o JOIN sales s ON o.order_id = s.order_id GROUP BY yr ORDER BY yr;"),
             BenchmarkQuestion(question_id="Q-150", question="Heavy scan: full historical sales join across products and departments", category="optimization", role_id=1, expected_behavior="ANSWER", expected_tables=["sales", "products", "departments"], is_safe=True, ground_truth_sql="SELECT p.category, SUM(s.quantity) AS tot_qty, SUM(s.revenue) AS tot_rev FROM sales s JOIN products p ON s.product_id = p.product_id GROUP BY p.category;"),
 
             # 10. Calculations & Metrics (15 questions)
@@ -347,11 +348,14 @@ class EvaluationLabService:
         # ABLATION VARIANT EXECUTION
         # =========================================================================
         
+        # Resolve isolated target engine for this datasource
+        target_engine = DataSourceManager.get_engine(db, data_source_id=data_source_id)
+
         # 1. Intent Precheck (Only active in Stage G / Full Trust Engine / Proposed)
         if variant in [BaselineVariantType.G_FULL_TRUST_ENGINE, BaselineVariantType.D_PROPOSED]:
             try:
                 catalog = SemanticCatalogService.get_catalog_for_role(
-                    db=db, data_source_id=data_source_id, role_id=bq.role_id, business_engine=business_engine
+                    db=db, data_source_id=data_source_id, role_id=bq.role_id, business_engine=target_engine
                 )
                 intent = IntentAnalyzerService.classify_question(bq.question, catalog)
                 if intent.classification in ["unsupported", "unauthorized"] or bq.expected_behavior in ["UNSUPPORTED", "UNAUTHORIZED"]:
@@ -368,7 +372,7 @@ class EvaluationLabService:
                         unauthorized_exposure=False,
                         error_type="E5",
                         latency_ms=latency,
-                        reliability_score=100,
+                        reliability_score=None,
                     )
             except Exception:
                 pass
@@ -475,7 +479,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
 
         if exec_sql:
             sandbox_res = ExecutionSandboxService.execute_query(
-                engine=business_engine,
+                engine=target_engine,
                 sql=exec_sql,
                 timeout_seconds=5.0,
                 max_rows=1000,
@@ -499,7 +503,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     )
                     if corr.recovered:
                         repaired_exec = ExecutionSandboxService.execute_query(
-                            engine=business_engine, sql=corr.final_sql, timeout_seconds=5.0, max_rows=1000
+                            engine=target_engine, sql=corr.final_sql, timeout_seconds=5.0, max_rows=1000
                         )
                         execution_success = repaired_exec.success
                         latency_ms += repaired_exec.latency_ms
@@ -511,7 +515,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             if execution_success:
                 if bq.ground_truth_sql:
                     ref_res = ExecutionSandboxService.execute_query(
-                        engine=business_engine, sql=bq.ground_truth_sql, timeout_seconds=5.0, max_rows=1000
+                        engine=target_engine, sql=bq.ground_truth_sql, timeout_seconds=5.0, max_rows=1000
                     )
                     if ref_res.success:
                         ref_rows = ref_res.rows or []
@@ -923,6 +927,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
         cls,
         db_factory: Any,
         request: EvaluationBenchmarkRequest,
+        created_by_user_id: Optional[int] = None,
     ) -> str:
         """
         Enqueues asynchronous benchmark evaluation job (ADR 006 / REQ-JOB-01).
@@ -937,6 +942,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
         try:
             db_job = EvaluationJob(
                 job_id=job_id,
+                created_by_user_id=created_by_user_id,
                 status="pending",
                 progress_pct=0.0,
                 error=None,
@@ -953,6 +959,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
         with cls._job_lock:
             cls._jobs[job_id] = {
                 "job_id": job_id,
+                "created_by_user_id": created_by_user_id,
                 "status": "pending",
                 "progress_pct": 0.0,
                 "error": None,
@@ -1055,6 +1062,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                             pass
                     return {
                         "job_id": db_job.job_id,
+                        "created_by_user_id": db_job.created_by_user_id,
                         "status": db_job.status,
                         "progress_pct": float(db_job.progress_pct or 0.0),
                         "error": db_job.error,

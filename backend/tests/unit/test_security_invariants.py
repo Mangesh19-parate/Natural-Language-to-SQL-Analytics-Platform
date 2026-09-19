@@ -10,6 +10,7 @@ from app.main import app
 from app.models.auth import User, Role
 from app.models.session import QueryHistory
 from app.models.policy import DataSource
+from app.models.lab import EvaluationJob
 from app.services.auth_service import AuthService, authorize_query_access
 from app.services.data_source_manager import DataSourceManager
 from app.services.optimizer import CostBasedJoinOptimizer
@@ -207,3 +208,45 @@ def test_optimizer_result_multiset_equivalence_invariant():
     orig_tuples = [tuple(sorted((k, v) for k, v in r.items())) for r in orig_res.rows]
     opt_tuples = [tuple(sorted((k, v) for k, v in r.items())) for r in opt_res.rows]
     assert Counter(orig_tuples) == Counter(opt_tuples)
+
+
+def test_idor_evaluation_job_ownership_invariant(db_session: Session):
+    """
+    Invariant: Benchmark jobs are strictly owned by their creator.
+    Other non-admin users receive HTTP 403 Forbidden when attempting to view.
+    Admins retain global observability access.
+    """
+    client = TestClient(app)
+    user_a = create_user_with_role(db_session, 331, "job_creator@example.com", "analyst")
+    user_b = create_user_with_role(db_session, 332, "job_attacker@example.com", "analyst")
+    admin_user = create_user_with_role(db_session, 333, "job_admin@example.com", "admin")
+
+    headers_a = get_auth_headers_for_user(user_a)
+    headers_b = get_auth_headers_for_user(user_b)
+    headers_admin = get_auth_headers_for_user(admin_user)
+
+    job_id = f"job-test-{uuid.uuid4().hex[:8]}"
+    db_job = EvaluationJob(
+        job_id=job_id,
+        created_by_user_id=user_a.user_id,
+        status="completed",
+        progress_pct=100.0,
+    )
+    db_session.add(db_job)
+    db_session.commit()
+
+    # 1. Attacker (User B) is forbidden from viewing User A's job
+    res_b = client.get(f"/api/lab/evaluation/jobs/{job_id}", headers=headers_b)
+    assert res_b.status_code == 403
+
+    # 2. Owner (User A) is authorized
+    res_a = client.get(f"/api/lab/evaluation/jobs/{job_id}", headers=headers_a)
+    assert res_a.status_code == 200
+    assert res_a.json()["job_id"] == job_id
+    assert res_a.json()["created_by_user_id"] == user_a.user_id
+
+    # 3. Admin retains global access
+    res_admin = client.get(f"/api/lab/evaluation/jobs/{job_id}", headers=headers_admin)
+    assert res_admin.status_code == 200
+    assert res_admin.json()["job_id"] == job_id
+

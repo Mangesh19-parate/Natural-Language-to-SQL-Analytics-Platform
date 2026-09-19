@@ -145,14 +145,14 @@ Ensure the graph is strictly acyclic and dependencies reference valid preceding 
                     step_id=1,
                     task_name=f"Baseline Year {y1} Revenue & Orders",
                     description=f"Extract aggregate revenue and volume for year {y1}",
-                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE strftime('%Y', order_date) = '{y1}'",
+                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE EXTRACT(YEAR FROM order_date) = {y1}",
                     dependencies=[],
                 ),
                 PlanSubTask(
                     step_id=2,
                     task_name=f"Comparison Year {y2} Revenue & Orders",
                     description=f"Extract aggregate revenue and volume for year {y2}",
-                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE strftime('%Y', order_date) = '{y2}'",
+                    sql_intent=f"SELECT SUM(total_amount) AS total_revenue, COUNT(*) AS total_orders FROM orders WHERE EXTRACT(YEAR FROM order_date) = {y2}",
                     dependencies=[],
                 ),
                 PlanSubTask(

@@ -18,7 +18,7 @@ def seed_planner_agent_data(db_session: Session):
     seed_business_database()
     app.dependency_overrides[get_db] = lambda: db_session
 
-    ds = DataSource(name="Planner DB", db_type="postgresql", secret_ref="env:TEST_SECRET", is_active=True)
+    ds = DataSource(name="Planner DB", db_type="sqlite", secret_ref="sqlite:///./local_data/business.db", is_active=True)
     role_admin = Role(role_name="admin")
     role_viewer = Role(role_name="viewer")
     db_session.add_all([ds, role_admin, role_viewer])

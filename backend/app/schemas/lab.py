@@ -143,6 +143,7 @@ class EvaluationJobAcceptedResponse(BaseModel):
 
 class EvaluationJobStatusResponse(BaseModel):
     job_id: str
+    created_by_user_id: Optional[int] = None
     status: str  # "pending" | "running" | "completed" | "failed"
     progress_pct: float = 0.0
     error: Optional[str] = None
