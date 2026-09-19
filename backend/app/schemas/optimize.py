@@ -21,6 +21,7 @@ class GateDecisionEnum(str, Enum):
 class OptimizeExplainRequest(BaseModel):
     sql: str
     query_id: Optional[str] = None
+    data_source_id: int = 1
     dialect: str = "sqlite"
     role_name: str = "analyst"
 
@@ -28,6 +29,7 @@ class OptimizeExplainRequest(BaseModel):
 class OptimizeAnalyzeRequest(BaseModel):
     sql: str
     query_id: Optional[str] = None
+    data_source_id: int = 1
     dialect: str = "sqlite"
     role_name: str = "admin"
 

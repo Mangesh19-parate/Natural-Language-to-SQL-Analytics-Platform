@@ -46,7 +46,7 @@ def optimize_explain(
         db=db,
         sql=request.sql,
         role_id=current_user.role_id or 3,
-        data_source_id=1,
+        data_source_id=request.data_source_id,
     )
     if not policy_res.is_allowed:
         violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
@@ -57,7 +57,7 @@ def optimize_explain(
 
     try:
         exec_sql = policy_res.injected_sql or request.sql
-        engine = DataSourceManager.get_engine(db, data_source_id=1)
+        engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id)
         plan_raw, plan_summary = QueryOptimizerService.run_explain(engine, exec_sql)
         suggestions = QueryOptimizerService.generate_suggestions(
             engine,
@@ -139,7 +139,7 @@ def optimize_analyze(
         db=db,
         sql=request.sql,
         role_id=current_user.role_id or 1,
-        data_source_id=1,
+        data_source_id=request.data_source_id,
     )
     if not policy_res.is_allowed:
         violation_msg = "; ".join(v.message for v in policy_res.violations) if policy_res.violations else "Policy rule violation"
@@ -151,7 +151,7 @@ def optimize_analyze(
 
     try:
         exec_sql = injected_sql or request.sql
-        engine = DataSourceManager.get_engine(db, data_source_id=1, admin=True)
+        engine = DataSourceManager.get_engine(db, data_source_id=request.data_source_id, admin=True)
         plan_raw, plan_summary, exec_stats = QueryOptimizerService.run_explain_analyze(
             engine,
             exec_sql,

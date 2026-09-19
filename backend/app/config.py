@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Distributed Cache & Rate Limiting (Redis)
+    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+
     # LLM Settings
     LLM_PROVIDER: str = "mock"  # 'openai' | 'groq' | 'gemini' | 'openrouter' | 'mock'
     OPENAI_API_KEY: Optional[str] = None
@@ -46,15 +49,27 @@ class Settings(BaseSettings):
     )
 
     def validate_production_environment(self) -> None:
-        """Enforces security boundaries at boot time: fails hard if running in production with dev secrets or shared admin DB credentials."""
+        """Enforces security boundaries at boot time: fails hard if running in production without complete infrastructure configuration."""
         if self.ENVIRONMENT.lower() == "production":
             if not self.JWT_SECRET_KEY or "dev-insecure" in self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
                 raise RuntimeError(
                     "CRITICAL SECURITY ERROR: Production deployment must configure a high-entropy JWT_SECRET_KEY (min 32 characters)."
                 )
+            if not self.METADATA_DB_URL or "postgresql" not in self.METADATA_DB_URL:
+                raise RuntimeError(
+                    "CRITICAL SECURITY ERROR: Production deployment must configure PostgreSQL METADATA_DB_URL (SQLite fallback is blocked in production)."
+                )
+            if not self.BUSINESS_DB_URL or "postgresql" not in self.BUSINESS_DB_URL:
+                raise RuntimeError(
+                    "CRITICAL SECURITY ERROR: Production deployment must configure PostgreSQL BUSINESS_DB_URL (SQLite fallback is blocked in production)."
+                )
             if self.BUSINESS_DB_URL and self.BUSINESS_ADMIN_DB_URL and self.BUSINESS_DB_URL == self.BUSINESS_ADMIN_DB_URL:
                 raise RuntimeError(
                     "CRITICAL SECURITY ERROR: Production deployment requires distinct database credentials for BUSINESS_ADMIN_DB_URL and BUSINESS_DB_URL (read-only)."
+                )
+            if not self.REDIS_URL or ("redis://" not in self.REDIS_URL and "rediss://" not in self.REDIS_URL):
+                raise RuntimeError(
+                    "CRITICAL SECURITY ERROR: Production deployment must configure a valid REDIS_URL for distributed token revocation and rate limiting."
                 )
 
     def get_effective_metadata_db_url(self) -> str:

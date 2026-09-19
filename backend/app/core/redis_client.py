@@ -32,7 +32,7 @@ class RedisService:
     def _init_client(self):
         self._last_check_time = time.time()
         try:
-            redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
+            redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
             pool = redis.ConnectionPool.from_url(
                 redis_url,
                 max_connections=20,

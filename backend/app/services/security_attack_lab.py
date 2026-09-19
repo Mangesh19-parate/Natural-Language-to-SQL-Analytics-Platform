@@ -23,10 +23,11 @@ from app.services.semantic_catalog_service import SemanticCatalogService
 class SecurityAttackLabService:
     """
     SECURITY ATTACK LAB (REQ-SECLAB-01 / Task T-31 / Rule R6.6).
-    Standing 128-case adversarial suite covering all structural, privilege escalation,
-    unauthorized table/column, dangerous function, Cartesian, and prompt injection attacks.
+    128-case curated adversarial policy-regression suite covering structural modifications,
+    privilege escalations, unauthorized table/column access, dangerous functions, Cartesian row explosions,
+    and prompt injection attempts against the AST policy compiler.
 
-    Hard Gate: 100% blocked, 0.00% safety violation rate.
+    Verification Standard: 128 Curated Adversarial Policy-Regression Vectors Verified.
     """
 
     @classmethod
