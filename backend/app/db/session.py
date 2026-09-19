@@ -9,8 +9,8 @@ metadata_connect_args = {"check_same_thread": False} if "sqlite" in metadata_db_
 metadata_pool_kwargs = {}
 if "sqlite" not in metadata_db_url:
     metadata_pool_kwargs = {
-        "pool_size": 10,
-        "max_overflow": 20,
+        "pool_size": 5,
+        "max_overflow": 5,
         "pool_timeout": 30.0,
         "pool_recycle": 1800,
     }
@@ -29,8 +29,8 @@ business_connect_args = {"check_same_thread": False} if "sqlite" in business_db_
 business_pool_kwargs = {}
 if "sqlite" not in business_db_url:
     business_pool_kwargs = {
-        "pool_size": 10,
-        "max_overflow": 20,
+        "pool_size": 5,
+        "max_overflow": 5,
         "pool_timeout": 30.0,
         "pool_recycle": 1800,
     }

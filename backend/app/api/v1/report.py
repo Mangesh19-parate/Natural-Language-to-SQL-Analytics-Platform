@@ -37,7 +37,7 @@ def export_pdf_report(
     try:
         report_id, file_path, content_hash = report_service.generate_pdf(request, user_id=current_user.user_id)
         
-        # Persist report record in metadata DB
+        # Persist report record in metadata DB transactionally
         created_at_dt = datetime.now(timezone.utc)
         try:
             report_record = Report(
@@ -53,8 +53,9 @@ def export_pdf_report(
             )
             db.add(report_record)
             db.commit()
-        except Exception:
+        except Exception as db_err:
             db.rollback()
+            raise RuntimeError(f"Database failed to persist report record: {db_err}") from db_err
 
         return ReportGenerateResponse(
             report_id=report_id,
@@ -104,8 +105,9 @@ def export_excel_report(
             )
             db.add(report_record)
             db.commit()
-        except Exception:
+        except Exception as db_err:
             db.rollback()
+            raise RuntimeError(f"Database failed to persist report record: {db_err}") from db_err
 
         return ReportGenerateResponse(
             report_id=report_id,
