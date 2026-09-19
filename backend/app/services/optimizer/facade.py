@@ -77,7 +77,7 @@ class CostBasedJoinOptimizer:
                 indexes_used=[],
                 stats_source=stats_source,
                 execution_benchmark=None,
-                execution_recommendation="Bypassed safe query pass-through",
+                execution_recommendation=f"Bypassed: {graph.unsupported_reason}. Unmodified original query passed through safely.",
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
 
@@ -124,6 +124,10 @@ class CostBasedJoinOptimizer:
                 table_name=graph.alias_to_table.get(alias, alias),
                 alias=alias,
             )
+            rec_note = "Single-table query verified with estimated scan plan."
+            if graph.has_insufficient_stats or stats_source != "live_engine":
+                rec_note += " (Confidence: LOW - Educational Selinger Heuristic)"
+
             return JoinPlanResponse(
                 original_sql=sql,
                 optimized_sql=sql,
@@ -140,7 +144,7 @@ class CostBasedJoinOptimizer:
                 indexes_used=indexes_used,
                 stats_source=stats_source,
                 execution_benchmark=None,
-                execution_recommendation="Single-table query verified with estimated scan plan",
+                execution_recommendation=rec_note,
                 created_at=datetime.now(timezone.utc).isoformat(),
             )
 
@@ -173,7 +177,10 @@ class CostBasedJoinOptimizer:
         else:
             gate_decision = GateDecisionEnum.ALLOW
             gate_reason = f"Cost ({round(optimal_cost, 1)}) is within deterministic resource threshold."
-            rec = f"Optimal join order computed using {strategy}. Estimated cost reduction: {reduction_pct}%."
+            rec = f"Optimal join order computed using {strategy} (Selinger-inspired model). Estimated cost reduction: {reduction_pct}%."
+
+        if graph.has_insufficient_stats or stats_source != "live_engine":
+            rec += " [Confidence: LOW - Statistics uncalibrated / heuristic fallback]"
 
         # Safe AST rewrite: Only rewrite purely associative/commutative INNER joins
         if graph.has_outer_join:

@@ -20,6 +20,7 @@ class JoinGraph:
         self.is_shape_supported: bool = True
         self.unsupported_reason: Optional[str] = None
         self.has_outer_join: bool = False
+        self.has_insufficient_stats: bool = False
         self._parse_ast()
 
     def _parse_ast(self):
@@ -64,12 +65,15 @@ class JoinGraph:
                 self.unsupported_reason = f"VOLATILE_FUNCTION_{func.name.upper()}"
                 return
 
-        # 6. Outer join detection
+        # 6. Outer join detection & shape rejection
         for join in parsed.find_all(exp.Join):
             kind = str(join.args.get("kind") or "").upper()
             side = str(join.args.get("side") or "").upper()
             if any(k in ["LEFT", "RIGHT", "FULL"] for k in [kind, side]):
                 self.has_outer_join = True
+                self.is_shape_supported = False
+                self.unsupported_reason = f"OUTER_JOIN_UNSUPPORTED_{side or kind}"
+                return
 
         # 7. Discover tables and aliases
         for tbl in parsed.find_all(exp.Table):
@@ -81,18 +85,51 @@ class JoinGraph:
                 self.filter_selectivity[alias] = 1.0
                 self.filter_columns[alias] = set()
 
-        # 8. Discover join predicates from ON clauses
+        # 8. Discover and strictly validate join predicates from ON clauses
         for join in parsed.find_all(exp.Join):
             on_clause = join.args.get("on")
             if on_clause:
-                self._extract_join_edges(on_clause)
+                is_valid_equi = self._validate_and_extract_join_edges(on_clause)
+                if not is_valid_equi:
+                    self.is_shape_supported = False
+                    self.unsupported_reason = "NON_EQUI_OR_COMPLEX_JOIN_PREDICATE"
+                    return
 
         # 9. Discover join predicates from WHERE clause (implicit joins)
         where_clause = parsed.find(exp.Where)
         if where_clause:
             self._extract_where_predicates(where_clause.this)
 
-    def _extract_join_edges(self, condition_node: exp.Expression):
+    def _validate_and_extract_join_edges(self, condition_node: exp.Expression) -> bool:
+        """
+        Validates that ON condition is strictly a conjunction (AND) of column equality predicates (a.id = b.id).
+        Rejects non-equi joins (> < >= <= !=), OR branches, functions, and literals in ON clauses.
+        """
+        conjuncts = []
+        if isinstance(condition_node, exp.And):
+            conjuncts = list(condition_node.flatten())
+        else:
+            conjuncts = [condition_node]
+
+        for c in conjuncts:
+            if not isinstance(c, exp.EQ):
+                return False
+            l_col = c.left
+            r_col = c.right
+            if not (isinstance(l_col, exp.Column) and isinstance(r_col, exp.Column)):
+                return False
+            t1 = l_col.table.lower() if l_col.table else ""
+            c1 = l_col.name.lower()
+            t2 = r_col.table.lower() if r_col.table else ""
+            c2 = r_col.name.lower()
+            if not (t1 and t2 and t1 != t2):
+                return False
+            edge = JoinEdge(t1, c1, t2, c2, "=", raw_predicate=str(c))
+            self.edges.append(edge)
+
+        return True
+
+    def _extract_where_predicates(self, condition_node: exp.Expression):
         for eq in condition_node.find_all(exp.EQ):
             l_col = eq.left
             r_col = eq.right
@@ -104,9 +141,6 @@ class JoinGraph:
                 if t1 and t2 and t1 != t2:
                     edge = JoinEdge(t1, c1, t2, c2, "=", raw_predicate=str(eq))
                     self.edges.append(edge)
-
-    def _extract_where_predicates(self, condition_node: exp.Expression):
-        self._extract_join_edges(condition_node)
 
         for col_expr in condition_node.find_all(exp.Column):
             t = col_expr.table.lower() if col_expr.table else ""
@@ -159,13 +193,19 @@ class JoinGraph:
 
     def get_table_cardinality(self, alias: str) -> float:
         t_name = self.alias_to_table.get(alias, alias)
-        stat = self.stats_map.get(t_name, CalibratedTableStats(t_name, 100, 2, "id", []))
+        stat = self.stats_map.get(t_name)
+        if not stat:
+            self.has_insufficient_stats = True
+            stat = CalibratedTableStats(t_name, 1.0, 1.0, "id", [], is_live=False, confidence="INSUFFICIENT_STATISTICS")
         sel = self.filter_selectivity.get(alias, 1.0)
         return max(1.0, stat.tuple_count * sel)
 
     def get_table_pages(self, alias: str) -> float:
         t_name = self.alias_to_table.get(alias, alias)
-        stat = self.stats_map.get(t_name, CalibratedTableStats(t_name, 100, 2, "id", []))
+        stat = self.stats_map.get(t_name)
+        if not stat:
+            self.has_insufficient_stats = True
+            stat = CalibratedTableStats(t_name, 1.0, 1.0, "id", [], is_live=False, confidence="INSUFFICIENT_STATISTICS")
         return max(1.0, stat.page_count)
 
     def find_connecting_edges(self, mask1_aliases: List[str], mask2_aliases: List[str]) -> List[JoinEdge]:

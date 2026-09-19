@@ -65,13 +65,29 @@ def benchmark_execution(
         opt_p95 = round(sorted_opt[int(0.95 * len(sorted_opt))], 3) if sorted_opt else opt_median
 
         orig_count = len(orig_rows)
+        opt_count = len(opt_rows)
         
-        # Exact tuple equivalence check
-        orig_serialized = sorted([str(tuple(r)) for r in orig_rows])
-        opt_serialized = sorted([str(tuple(r)) for r in opt_rows])
-        results_match = (orig_serialized == opt_serialized)
+        # Exact tuple equivalence check with floating-point normalization
+        def _normalize_cell(c: Any) -> Any:
+            if isinstance(c, float):
+                return round(c, 6)
+            return c
+
+        def _normalize_row(r: Any) -> str:
+            return str(tuple(_normalize_cell(x) for x in r))
+
+        orig_serialized = sorted([_normalize_row(r) for r in orig_rows])
+        opt_serialized = sorted([_normalize_row(r) for r in opt_rows])
+        results_match = (orig_count == opt_count) and (orig_serialized == opt_serialized)
 
         speedup = round(orig_median / max(opt_median, 0.001), 2)
+
+        if not results_match:
+            validation_status = "DATA_MISMATCH"
+        elif orig_count >= max_rows:
+            validation_status = "EQUIVALENT_UP_TO_SAMPLE_LIMIT"
+        else:
+            validation_status = "VERIFIED_EQUIVALENT"
 
         return ExecutionBenchmarkResult(
             original_exec_ms=orig_median,
@@ -79,7 +95,7 @@ def benchmark_execution(
             speedup_ratio=speedup,
             results_equivalent=results_match,
             row_count=orig_count,
-            validation_status="VERIFIED_EQUIVALENT" if results_match else "DATA_MISMATCH",
+            validation_status=validation_status,
             trials_run=timed_trials,
             original_p95_ms=orig_p95,
             optimized_p95_ms=opt_p95,

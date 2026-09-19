@@ -4,8 +4,9 @@ from app.schemas.optimize import JoinAlgorithmEnum
 
 class CalibratedTableStats:
     """
-    Table Statistics calibrated for cost-based query optimization.
+    Table Statistics calibrated for Selinger-inspired cost-based query optimization.
     Stores live tuple counts, page estimates, PK/FK relationships, and exact indexed column sets.
+    Explicitly tracks whether stats are live, estimated, or insufficient.
     """
     def __init__(
         self,
@@ -18,6 +19,7 @@ class CalibratedTableStats:
         foreign_keys: Optional[List[Dict[str, Any]]] = None,
         ndv_map: Optional[Dict[str, float]] = None,
         is_live: bool = True,
+        confidence: str = "HIGH",  # "HIGH" | "LOW" | "INSUFFICIENT_STATISTICS"
     ):
         self.table_name = table_name.lower()
         self.tuple_count = max(1.0, float(tuple_count))
@@ -31,6 +33,7 @@ class CalibratedTableStats:
         self.foreign_keys = foreign_keys or []
         self.ndv_map = {k.lower(): max(1.0, float(v)) for k, v in (ndv_map or {}).items()}
         self.is_live = is_live
+        self.confidence = confidence
 
 
 DEFAULT_TABLE_STATS: Dict[str, CalibratedTableStats] = {

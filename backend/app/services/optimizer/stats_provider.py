@@ -143,7 +143,7 @@ class TableStatsProvider:
                                     ndv_res = conn.execute(text(f'SELECT COUNT(DISTINCT "{col}") FROM "{t_name}"'))
                                     ndv_map[col] = float(ndv_res.scalar() or 1.0)
                                 except Exception:
-                                    ndv_map[col] = min(tuple_count, 10.0)
+                                    ndv_map[col] = 1.0
 
                     stats_map[t_lower] = CalibratedTableStats(
                         table_name=t_lower,
@@ -154,7 +154,8 @@ class TableStatsProvider:
                         index_columns=index_columns_map,
                         foreign_keys=foreign_keys,
                         ndv_map=ndv_map,
-                        is_live=True,
+                        is_live=is_live_stat,
+                        confidence="HIGH" if is_live_stat else "INSUFFICIENT_STATISTICS",
                     )
 
             if stats_map:

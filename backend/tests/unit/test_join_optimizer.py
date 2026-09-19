@@ -252,16 +252,30 @@ def test_optimizer_shape_bypass_subquery():
 
 
 def test_optimizer_outer_join_preservation():
-    """Verify that LEFT/RIGHT/FULL outer joins are preserved without arbitrary reordering."""
+    """Verify that LEFT/RIGHT/FULL outer joins are safely bypassed without arbitrary reordering."""
     sql = """
         SELECT d.department_name, e.first_name
         FROM departments d
         LEFT JOIN employees e ON d.department_id = e.department_id;
     """
     resp = CostBasedJoinOptimizer.optimize_query(sql)
-    assert resp.search_strategy == "PRESERVED_OUTER_JOIN"
+    assert "BYPASS" in resp.search_strategy or resp.search_strategy == "PRESERVED_OUTER_JOIN"
     assert resp.gate_decision == GateDecisionEnum.ALLOW
     assert "LEFT JOIN" in resp.optimized_sql.upper()
+    assert resp.optimized_sql == sql
+
+
+def test_optimizer_rejects_non_equi_join_predicate():
+    """Verify that non-equi predicates (e.g. created_at > b.created_at) in JOIN ON cause safe bypass."""
+    sql = """
+        SELECT c.customer_name, o.total_amount
+        FROM customers c
+        JOIN orders o ON c.customer_id = o.customer_id AND o.total_amount > 100.0;
+    """
+    resp = CostBasedJoinOptimizer.optimize_query(sql)
+    assert "BYPASS" in resp.search_strategy
+    assert "NON_EQUI" in resp.search_strategy or "COMPLEX" in resp.search_strategy
+    assert resp.optimized_sql == sql
 
 
 def test_stats_provider_cache_isolation_per_data_source():
