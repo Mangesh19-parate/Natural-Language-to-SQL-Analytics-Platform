@@ -82,7 +82,6 @@ export async function apiFetch(url, options = {}) {
 
     return response;
   } catch (err) {
-    clearTimeout(timeoutId);
     throw err;
   }
 }

@@ -176,8 +176,8 @@ class ReportGeneratorService:
                 ["Schema Grounding", fmt_sub('schema_grounding'), "25%", "Catalog lookup & foreign key binding"],
                 ["Join Confidence", fmt_sub('join_confidence'), "20%", "FK relationship graph validation"],
                 ["Filter Interpretation", fmt_sub('filter_interpretation'), "15%", "Sanitized literal value grounding"],
-                ["Execution Validation", fmt_sub('execution_validation'), "25%", "Zero-error sandbox execution"],
-                ["Result Sanity", fmt_sub('result_sanity'), "15%", "Cardinality & non-empty result checks"],
+                ["Execution Validation", fmt_sub('execution_validation'), "20%", "Zero-error sandbox execution"],
+                ["Result Sanity", fmt_sub('result_sanity'), "20%", "Cardinality & non-empty result checks"],
                 ["<b>Composite Trust Score</b>", f"<b>{score_pct}</b>", "<b>100%</b>", f"Status: <b>{item.status.upper()}</b>"]
             ]
             rel_table = Table(rel_data, colWidths=[140, 75, 55, 270])

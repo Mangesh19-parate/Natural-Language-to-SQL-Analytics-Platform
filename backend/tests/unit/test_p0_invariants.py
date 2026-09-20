@@ -82,3 +82,25 @@ def test_evaluation_benchmark_taxonomy_metadata():
     assert len(questions) == 165
     gt_cases = [q for q in questions if q.ground_truth_sql and q.ground_truth_sql.strip()]
     assert len(gt_cases) == 100
+
+
+def test_optimizer_or_predicate_safety():
+    """
+    P0 Invariant: Optimizer MUST reject queries containing cross-table predicates inside OR/NOT
+    and never extract them as independent join edges.
+    """
+    from app.services.optimizer.join_graph import JoinGraph
+    
+    # Query with cross-table condition inside OR branch
+    sql = "SELECT * FROM customers c, orders o WHERE (c.customer_id = o.customer_id OR c.city = 'London')"
+    graph = JoinGraph(sql)
+    assert not graph.is_shape_supported
+    assert graph.unsupported_reason == "CROSS_TABLE_OR_PREDICATE_UNSUPPORTED"
+    assert len(graph.edges) == 0
+
+    # Query with clean conjunctive equi-join is supported
+    valid_sql = "SELECT * FROM customers c, orders o WHERE c.customer_id = o.customer_id AND c.city = 'London'"
+    valid_graph = JoinGraph(valid_sql)
+    assert valid_graph.is_shape_supported
+    assert len(valid_graph.edges) == 1
+

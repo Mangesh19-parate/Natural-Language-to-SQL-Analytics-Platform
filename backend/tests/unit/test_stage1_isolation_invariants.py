@@ -220,10 +220,11 @@ def test_clean_alembic_migrations_create_authoritative_schema(tmp_path):
     db_file = tmp_path / "fresh_migration.db"
     db_url = f"sqlite:///{db_file.as_posix()}"
 
-    alembic_ini_path = Path("backend/alembic.ini").resolve()
+    alembic_ini_path = Path("alembic.ini").resolve() if Path("alembic.ini").exists() else Path("backend/alembic.ini").resolve()
+    script_loc = Path("alembic").resolve() if Path("alembic").exists() else Path("backend/alembic").resolve()
     alembic_cfg = Config(str(alembic_ini_path))
     alembic_cfg.set_main_option("sqlalchemy.url", db_url)
-    alembic_cfg.set_main_option("script_location", str(Path("backend/alembic").resolve()))
+    alembic_cfg.set_main_option("script_location", str(script_loc))
 
     # Run upgrade head on completely empty database
     command.upgrade(alembic_cfg, "head")

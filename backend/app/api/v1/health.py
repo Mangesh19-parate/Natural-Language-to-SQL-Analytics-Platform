@@ -1,4 +1,5 @@
 import os
+import json
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -30,7 +31,7 @@ def get_health(db: Session = Depends(get_db)):
     except Exception:
         biz_connected = False
 
-    status_str = "healthy" if (meta_connected or biz_connected) else "degraded"
+    status_str = "healthy" if (meta_connected and biz_connected) else ("degraded" if (meta_connected or biz_connected) else "unavailable")
 
     return HealthResponse(
         status=status_str,
@@ -64,7 +65,7 @@ def get_readiness_probe(db: Session = Depends(get_db)):
 
     if errors:
         return Response(
-            content=f'{{"status": "not_ready", "errors": {errors}}}',
+            content=json.dumps({"status": "not_ready", "errors": errors}),
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             media_type="application/json",
         )

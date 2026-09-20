@@ -494,7 +494,6 @@ export default function App() {
         <AuthModal
           isOpen={isAuthModalOpen}
           onClose={() => setIsAuthModalOpen(false)}
-          onAuthSuccess={handleAuthSuccess}
           currentRole={selectedRoleName}
         />
       )}

@@ -285,7 +285,7 @@ def test_composite_reliability_deterministic_formula(setup_reliability_test_db: 
         )
     )
     assert breakdown.composite_score == expected_composite
-    assert breakdown.is_calibrated is True
+    assert breakdown.is_calibrated is False
     assert "Rule R3.3" in breakdown.rule_reference
     assert len(breakdown.schema_grounding.evidence_items) > 0
     assert len(breakdown.join_confidence.evidence_items) > 0

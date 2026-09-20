@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentRole = 'admin' }) {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,11 +34,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, currentRole 
       const resData = await res.json();
       if (resData?.success) {
         const { access_token, refresh_token, user } = resData.data;
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('refresh_token', refresh_token);
-        localStorage.setItem('auth_role_name', user.role_name || 'viewer');
-        localStorage.setItem('auth_role_id', String(user.role_id || 1));
-        localStorage.setItem('auth_user_email', user.email);
+        login(access_token, refresh_token, user);
 
         if (onAuthSuccess) {
           onAuthSuccess(user);

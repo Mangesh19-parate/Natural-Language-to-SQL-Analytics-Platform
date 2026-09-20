@@ -143,17 +143,29 @@ class JoinGraph:
         return True
 
     def _extract_where_predicates(self, condition_node: exp.Expression):
-        for eq in condition_node.find_all(exp.EQ):
-            l_col = eq.left
-            r_col = eq.right
-            if isinstance(l_col, exp.Column) and isinstance(r_col, exp.Column):
-                t1 = l_col.table.lower() if l_col.table else ""
-                c1 = l_col.name.lower()
-                t2 = r_col.table.lower() if r_col.table else ""
-                c2 = r_col.name.lower()
-                if t1 and t2 and t1 != t2:
-                    edge = JoinEdge(t1, c1, t2, c2, "=", raw_predicate=str(eq))
-                    self.edges.append(edge)
+        # 1. Unsafe Cross-Table OR Check: Reject query shape if OR node contains columns from multiple tables
+        for or_node in condition_node.find_all(exp.Or):
+            cols = list(or_node.find_all(exp.Column))
+            tables_in_or = {c.table.lower() for c in cols if c.table}
+            if len(tables_in_or) > 1:
+                self.is_shape_supported = False
+                self.unsupported_reason = "CROSS_TABLE_OR_PREDICATE_UNSUPPORTED"
+                return
+
+        # 2. Extract join edges ONLY from top-level AND conjuncts (never inside OR/NOT subtrees)
+        conjuncts = list(condition_node.flatten()) if isinstance(condition_node, exp.And) else [condition_node]
+        for c in conjuncts:
+            if isinstance(c, exp.EQ):
+                l_col = c.left
+                r_col = c.right
+                if isinstance(l_col, exp.Column) and isinstance(r_col, exp.Column):
+                    t1 = l_col.table.lower() if l_col.table else ""
+                    c1 = l_col.name.lower()
+                    t2 = r_col.table.lower() if r_col.table else ""
+                    c2 = r_col.name.lower()
+                    if t1 and t2 and t1 != t2:
+                        edge = JoinEdge(t1, c1, t2, c2, "=", raw_predicate=str(c))
+                        self.edges.append(edge)
 
         for col_expr in condition_node.find_all(exp.Column):
             t = col_expr.table.lower() if col_expr.table else ""

@@ -42,6 +42,14 @@ export function AuthProvider({ children }) {
     setUserEmail('');
   }, []);
 
+  useEffect(() => {
+    const handleExpired = () => logout();
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('auth:expired', handleExpired);
+      return () => window.removeEventListener('auth:expired', handleExpired);
+    }
+  }, [logout]);
+
   const value = {
     token,
     roleId,
