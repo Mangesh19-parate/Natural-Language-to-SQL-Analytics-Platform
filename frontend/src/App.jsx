@@ -18,9 +18,31 @@ import Badge from './components/ui/Badge.jsx';
 import Button from './components/ui/Button.jsx';
 
 import { apiFetch } from './utils/api.js';
+import { useAuth } from './context/AuthContext.jsx';
+import { useDataSource } from './context/DataSourceContext.jsx';
+import { parseHashRoute, formatHashRoute } from './utils/router.js';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('workspace'); // 'workspace' | 'planner' | 'history' | 'governance' | 'performance' | 'security' | 'evaluation' | 'observatory' | 'replay'
+  const {
+    roleId: selectedRole,
+    setRoleId: setSelectedRole,
+    roleName: selectedRoleName,
+    setRoleName: setSelectedRoleName,
+    userEmail: activeUserEmail,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    login,
+  } = useAuth();
+
+  const {
+    dataSources,
+    selectedDataSourceId,
+    setSelectedDataSourceId,
+  } = useDataSource();
+
+  const [activeTab, setActiveTab] = useState(() => parseHashRoute().view);
+  const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(() => parseHashRoute().params.queryId || null);
+
   const [health, setHealth] = useState({
     status: 'operational',
     environment: 'local',
@@ -28,21 +50,6 @@ export default function App() {
     business_db_connected: true,
     version: '1.2.0',
   });
-  const [selectedRole, setSelectedRole] = useState(() => {
-    const saved = localStorage.getItem('auth_role_id');
-    return saved ? Number(saved) : (localStorage.getItem('access_token') ? 1 : null);
-  });
-  const [selectedRoleName, setSelectedRoleName] = useState(() => {
-    const saved = localStorage.getItem('auth_role_name');
-    return saved || (localStorage.getItem('access_token') ? 'admin' : 'Unauthenticated');
-  });
-  const [selectedDataSourceId, setSelectedDataSourceId] = useState(1);
-  const [dataSources, setDataSources] = useState([
-    { data_source_id: 1, name: 'PostgreSQL Primary', db_type: 'postgresql' }
-  ]);
-  const [activeUserEmail, setActiveUserEmail] = useState(() => localStorage.getItem('auth_user_email') || '');
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(null);
 
   // Workspace Studio State
   const [queryInput, setQueryInput] = useState('');
@@ -53,18 +60,29 @@ export default function App() {
   const [activeExecutionData, setActiveExecutionData] = useState(null);
 
   useEffect(() => {
+    const handleHashChange = () => {
+      const { view, params } = parseHashRoute();
+      setActiveTab(view);
+      if (params.queryId) {
+        setSelectedReplayQueryId(params.queryId);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigateTo = (tab, params = {}) => {
+    setActiveTab(tab);
+    if (params.queryId) {
+      setSelectedReplayQueryId(params.queryId);
+    }
+    window.location.hash = formatHashRoute(tab, params);
+  };
+
+  useEffect(() => {
     apiFetch('/api/health')
       .then((res) => res.json())
       .then((data) => setHealth(data))
-      .catch(() => {});
-
-    apiFetch('/api/schema/data-sources')
-      .then((res) => res.json())
-      .then((resData) => {
-        if (resData?.success && Array.isArray(resData.data) && resData.data.length > 0) {
-          setDataSources(resData.data);
-        }
-      })
       .catch(() => {});
   }, []);
 
@@ -188,23 +206,21 @@ export default function App() {
     localStorage.setItem('auth_role_name', name);
   };
 
-  const handleAuthSuccess = (userData, accessToken) => {
+  const handleAuthSuccess = (userData, accessToken, refreshToken) => {
     if (userData) {
-      setActiveUserEmail(userData.email || '');
       const rId = userData.role_id || 1;
       const rName = userData.role?.role_name || (rId === 1 ? 'admin' : rId === 2 ? 'analyst' : 'viewer');
-      setSelectedRole(rId);
-      setSelectedRoleName(rName);
-      localStorage.setItem('auth_role_id', String(rId));
-      localStorage.setItem('auth_role_name', rName);
-      localStorage.setItem('auth_user_email', userData.email || '');
+      login(accessToken, refreshToken, {
+        email: userData.email,
+        role_id: rId,
+        role_name: rName,
+      });
     }
     setIsAuthModalOpen(false);
   };
 
   const handleInspectReplay = (queryId) => {
-    setSelectedReplayQueryId(queryId);
-    setActiveTab('replay');
+    navigateTo('replay', { queryId });
   };
 
   const sampleQueries = [
@@ -228,49 +244,49 @@ export default function App() {
 
         <nav className="nav-tabs">
           <button
-            onClick={() => setActiveTab('workspace')}
+            onClick={() => navigateTo('workspace')}
             className={`nav-tab-btn ${activeTab === 'workspace' ? 'active' : ''}`}
           >
             Workspace
           </button>
           <button
-            onClick={() => setActiveTab('planner')}
+            onClick={() => navigateTo('planner')}
             className={`nav-tab-btn ${activeTab === 'planner' ? 'active' : ''}`}
           >
             Compound Planner
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => navigateTo('history')}
             className={`nav-tab-btn ${activeTab === 'history' || activeTab === 'replay' ? 'active' : ''}`}
           >
             History &amp; Replay
           </button>
           <button
-            onClick={() => setActiveTab('governance')}
+            onClick={() => navigateTo('governance')}
             className={`nav-tab-btn ${activeTab === 'governance' ? 'active' : ''}`}
           >
             Governance
           </button>
           <button
-            onClick={() => setActiveTab('performance')}
+            onClick={() => navigateTo('performance')}
             className={`nav-tab-btn ${activeTab === 'performance' ? 'active' : ''}`}
           >
             Performance
           </button>
           <button
-            onClick={() => setActiveTab('security')}
+            onClick={() => navigateTo('security')}
             className={`nav-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
           >
             Security Suite
           </button>
           <button
-            onClick={() => setActiveTab('evaluation')}
+            onClick={() => navigateTo('evaluation')}
             className={`nav-tab-btn ${activeTab === 'evaluation' ? 'active' : ''}`}
           >
             Evaluation Benchmark
           </button>
           <button
-            onClick={() => setActiveTab('observatory')}
+            onClick={() => navigateTo('observatory')}
             className={`nav-tab-btn ${activeTab === 'observatory' ? 'active' : ''}`}
           >
             Observatory
@@ -405,7 +421,7 @@ export default function App() {
             dataSourceId={selectedDataSourceId}
             onRerunQuery={(q) => {
               setQueryInput(q);
-              setActiveTab('workspace');
+              navigateTo('workspace');
               handleExecuteStudioQuery(q);
             }}
             onInspectReplay={handleInspectReplay}
@@ -418,7 +434,7 @@ export default function App() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setActiveTab('history')}
+                onClick={() => navigateTo('history')}
               >
                 ← Back to History
               </Button>
