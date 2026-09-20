@@ -3,12 +3,12 @@ import re
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
-from app.db.session import business_engine
 from app.schemas.query import (
     ErrorTaxonomyType,
     CorrectionAttempt,
     SelfCorrectionResult,
 )
+from app.services.data_source_manager import DataSourceManager
 from app.services.llm_provider import LLMProvider
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
@@ -171,10 +171,12 @@ class SelfCorrectionService:
         role_id: int = 4,
         max_retries: int = 3,
         is_policy_rejection: bool = False,
+        engine: Optional[Any] = None,
     ) -> SelfCorrectionResult:
         """
         Executes self-correction retry loop up to max_retries (REQ-CORR-01, REQ-CORR-02).
         Enforces Rule R4.2: E5 (authorization error) is NEVER retried.
+        Routes execution strictly to the target_engine matching data_source_id.
         """
         error_type = cls.classify_error(error_message, is_policy_rejection=is_policy_rejection)
 
@@ -193,13 +195,21 @@ class SelfCorrectionService:
                 ),
             )
 
+        # Fail-closed target engine resolution
+        target_engine = engine or DataSourceManager.get_engine(db, data_source_id=data_source_id)
+
         attempts: List[CorrectionAttempt] = []
         current_sql = failing_sql
         current_error = error_message
         current_error_type = error_type
 
-        # Build schema context for LLM repair
-        catalog_obj = SemanticCatalogService.get_catalog_for_role(db, data_source_id=data_source_id, role_id=role_id)
+        # Build schema context for LLM repair using target_engine
+        catalog_obj = SemanticCatalogService.get_catalog_for_role(
+            db,
+            data_source_id=data_source_id,
+            role_id=role_id,
+            business_engine=target_engine,
+        )
         catalog_prompt = CatalogPromptBuilder.format_catalog_text(catalog_obj)
 
         for attempt_idx in range(1, max_retries + 1):
@@ -293,9 +303,9 @@ class SelfCorrectionService:
                 sql=target_sql,
             )
 
-            # Policy approved -> Test candidate in sandbox execution
+            # Policy approved -> Test candidate in sandbox execution on target_engine
             exec_res = ExecutionSandboxService.execute_query(
-                engine=business_engine,
+                engine=target_engine,
                 sql=target_sql,
                 timeout_seconds=10.0,
                 max_rows=10000,

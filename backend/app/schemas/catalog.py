@@ -26,3 +26,12 @@ class SemanticCatalogResponse(BaseModel):
     role_id: Optional[int] = None
     role_name: Optional[str] = None
     tables: List[TableCatalogItem] = []
+
+
+class DataSourceItemResponse(BaseModel):
+    data_source_id: int
+    name: str
+    db_type: str
+    is_active: bool
+    description: Optional[str] = None
+

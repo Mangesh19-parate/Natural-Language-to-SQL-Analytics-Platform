@@ -1,16 +1,52 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.auth import User
 from app.models.policy import DataSource
 from app.schemas.common import StandardResponse
-from app.schemas.catalog import SemanticCatalogResponse
+from app.schemas.catalog import SemanticCatalogResponse, DataSourceItemResponse
 from app.services.auth_service import get_current_user, get_effective_role_id
 from app.services.semantic_catalog_service import SemanticCatalogService
 from app.services.data_source_manager import DataSourceManager, DataSourceUnavailableError
 
 router = APIRouter(prefix="/schema", tags=["Semantic Catalog"])
+
+
+@router.get("/data-sources", response_model=StandardResponse[List[DataSourceItemResponse]])
+def get_data_sources(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    GET /api/schema/data-sources — Returns list of active registered data sources (REQ-DS-01).
+    """
+    sources = db.query(DataSource).filter(DataSource.is_active == True).order_by(DataSource.data_source_id.asc()).all()
+    items = [
+        DataSourceItemResponse(
+            data_source_id=s.data_source_id,
+            name=s.name,
+            db_type=s.db_type,
+            is_active=s.is_active,
+            description=f"{s.name} ({s.db_type})"
+        )
+        for s in sources
+    ]
+    if not items:
+        items = [
+            DataSourceItemResponse(
+                data_source_id=1,
+                name="PostgreSQL Primary",
+                db_type="postgresql",
+                is_active=True,
+                description="Primary Database"
+            )
+        ]
+    return StandardResponse(
+        success=True,
+        message="Active data sources retrieved successfully",
+        data=items
+    )
 
 
 @router.get("", response_model=StandardResponse[SemanticCatalogResponse])

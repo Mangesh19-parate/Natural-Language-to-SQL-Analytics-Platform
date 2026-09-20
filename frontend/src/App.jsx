@@ -37,6 +37,9 @@ export default function App() {
     return saved || (localStorage.getItem('access_token') ? 'admin' : 'Unauthenticated');
   });
   const [selectedDataSourceId, setSelectedDataSourceId] = useState(1);
+  const [dataSources, setDataSources] = useState([
+    { data_source_id: 1, name: 'PostgreSQL Primary', db_type: 'postgresql' }
+  ]);
   const [activeUserEmail, setActiveUserEmail] = useState(() => localStorage.getItem('auth_user_email') || '');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedReplayQueryId, setSelectedReplayQueryId] = useState(null);
@@ -53,6 +56,15 @@ export default function App() {
     apiFetch('/api/health')
       .then((res) => res.json())
       .then((data) => setHealth(data))
+      .catch(() => {});
+
+    apiFetch('/api/schema/data-sources')
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData?.success && Array.isArray(resData.data) && resData.data.length > 0) {
+          setDataSources(resData.data);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -266,7 +278,7 @@ export default function App() {
         </nav>
 
         <div className="telemetry-group">
-          {/* Data Source Selector */}
+          {/* Dynamic Data Source Selector */}
           <select
             value={selectedDataSourceId}
             onChange={(e) => setSelectedDataSourceId(Number(e.target.value))}
@@ -283,13 +295,16 @@ export default function App() {
             }}
             title="Active Data Source"
           >
-            <option value={1}>DS #1: PostgreSQL Primary</option>
-            <option value={2}>DS #2: Read Replica</option>
+            {dataSources.map((ds) => (
+              <option key={ds.data_source_id} value={ds.data_source_id}>
+                DS #{ds.data_source_id}: {ds.name}
+              </option>
+            ))}
           </select>
 
-          {/* Role selector */}
+          {/* Role selector (Admin Simulation) */}
           <select
-            value={selectedRole}
+            value={selectedRole || 1}
             onChange={(e) => handleRoleSelectChange(Number(e.target.value))}
             style={{
               background: 'var(--bg-subtle)',
@@ -302,11 +317,11 @@ export default function App() {
               outline: 'none',
               cursor: 'pointer',
             }}
-            title="Active Role"
+            title="Simulated Role (Policy Gating)"
           >
-            <option value={1}>Admin</option>
-            <option value={2}>Analyst</option>
-            <option value={3}>Viewer</option>
+            <option value={1}>Simulate: Admin</option>
+            <option value={2}>Simulate: Analyst</option>
+            <option value={3}>Simulate: Viewer</option>
           </select>
 
           <Button

@@ -5,7 +5,7 @@ from app.schemas.policy import PolicyValidationResult
 from app.schemas.query import CriticAnalysisResult, SelfCorrectionResult, ResultValidationReport, CriticFindingType, ResultValidationType
 from app.services.sql_parser import SQLASTParser
 from app.services.semantic_catalog_service import SemanticCatalogService
-from app.db.session import business_engine
+from app.services.data_source_manager import DataSourceManager
 
 
 class ReliabilityScorerService:
@@ -56,11 +56,12 @@ class ReliabilityScorerService:
             )
 
         try:
+            target_engine = DataSourceManager.get_engine(db=db, data_source_id=data_source_id)
             catalog = SemanticCatalogService.get_catalog_for_role(
                 db=db,
                 data_source_id=data_source_id,
                 role_id=role_id,
-                business_engine=business_engine,
+                business_engine=target_engine,
             )
             catalog_tables = {t.table_name.lower(): t for t in catalog.tables}
         except Exception:

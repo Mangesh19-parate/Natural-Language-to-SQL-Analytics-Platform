@@ -12,7 +12,6 @@ from app.services.sql_generator import SQLGeneratorService
 from app.services.policy_engine import PolicyEngine
 from app.services.execution_sandbox import ExecutionSandboxService
 from app.services.data_source_manager import DataSourceManager
-from app.db.session import business_engine
 
 
 class PlannerAgentService:

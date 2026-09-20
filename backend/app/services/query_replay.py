@@ -20,7 +20,7 @@ from app.services.sql_critic import SQLCriticService
 from app.services.result_validator import ResultValidatorService
 from app.services.reliability_scorer import ReliabilityScorerService
 from app.services.chart_engine import ChartEngineService
-from app.db.session import business_engine
+from app.services.data_source_manager import DataSourceManager
 
 
 class QueryReplayService:
@@ -322,8 +322,9 @@ class QueryReplayService:
             sql=exec_sql,
         )
 
+        target_engine = DataSourceManager.get_engine(db=db, data_source_id=data_source_id)
         sandbox_res = ExecutionSandboxService.execute_query(
-            engine=business_engine,
+            engine=target_engine,
             sql=exec_sql,
             timeout_seconds=timeout_seconds,
             max_rows=max_rows,
