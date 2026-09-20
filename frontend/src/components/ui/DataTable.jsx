@@ -82,15 +82,15 @@ export default function DataTable({
               <tr key={idx}>
                 {effectiveColumns.map((col) => {
                   const val = row[col];
-                  const displayVal =
-                    val === null || val === undefined
-                      ? <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>NULL</span>
-                      : typeof val === 'object'
-                      ? JSON.stringify(val)
-                      : String(val);
                   return (
                     <td key={col} style={{ fontFamily: typeof val === 'number' ? 'var(--font-mono)' : 'inherit' }}>
-                      {displayVal}
+                      {val == null ? (
+                        <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>NULL</span>
+                      ) : typeof val === 'object' ? (
+                        JSON.stringify(val)
+                      ) : (
+                        String(val)
+                      )}
                     </td>
                   );
                 })}

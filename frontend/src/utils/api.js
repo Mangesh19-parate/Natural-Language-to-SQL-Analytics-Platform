@@ -49,19 +49,16 @@ export function getAuthHeaders(extraHeaders = {}) {
 
 export async function apiFetch(url, options = {}) {
   const { timeoutMs = 30000, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
+  const timeoutSignal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(timeoutMs) : undefined;
   const headers = getAuthHeaders(fetchOptions.headers || {});
   const config = {
     ...fetchOptions,
-    signal: fetchOptions.signal || controller.signal,
+    signal: fetchOptions.signal || timeoutSignal,
     headers,
   };
 
   try {
     let response = await fetch(url, config);
-    clearTimeout(timeoutId);
 
     // If 401 Unauthorized, attempt token refresh if refresh_token is present
     if (response.status === 401 && !url.includes('/api/auth/refresh') && !url.includes('/api/auth/login')) {

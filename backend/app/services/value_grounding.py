@@ -43,18 +43,10 @@ class ValueGroundingService:
             return None
 
         query_str = f'SELECT DISTINCT "{column_name}" FROM "{table_name}" WHERE "{column_name}" IS NOT NULL LIMIT {max_examples}'
-        
         try:
             with engine.connect() as conn:
                 result = conn.execute(text(query_str))
-                examples = []
-                for row in result:
-                    val = row[0]
-                    if val is not None:
-                        str_val = str(val).strip()
-                        if str_val and str_val not in examples:
-                            examples.append(str_val)
-                return examples if examples else None
+                examples = list(dict.fromkeys(str(r[0]).strip() for r in result if r[0] is not None and str(r[0]).strip()))
+                return examples or None
         except Exception:
-            # On any DB error or unsupported dialect quotes, fallback safely to None
             return None

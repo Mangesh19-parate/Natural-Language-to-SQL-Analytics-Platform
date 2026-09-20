@@ -26,11 +26,10 @@ class DAGValidator:
         if not sub_tasks:
             raise DAGValidationError("DAG is empty: At least one analytical sub-task required.")
 
-        step_ids = {task.step_id for task in sub_tasks}
-        if len(step_ids) != len(sub_tasks):
-            raise DAGValidationError("Duplicate step_ids detected in DAG definition.")
-
         task_map: Dict[int, PlanSubTask] = {task.step_id: task for task in sub_tasks}
+        if len(task_map) != len(sub_tasks):
+            raise DAGValidationError("Duplicate step_ids detected in DAG definition.")
+        step_ids = set(task_map.keys())
         graph: Dict[int, set] = {}
 
         for task in sub_tasks:

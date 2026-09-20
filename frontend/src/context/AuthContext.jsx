@@ -18,33 +18,24 @@ export function AuthProvider({ children }) {
   const isAuthenticated = Boolean(token);
 
   const login = useCallback((accessToken, refreshToken, userData = {}) => {
-    if (accessToken) {
-      localStorage.setItem('access_token', accessToken);
-      setToken(accessToken);
-    }
-    if (refreshToken) {
-      localStorage.setItem('refresh_token', refreshToken);
-    }
-    if (userData.role_id) {
-      localStorage.setItem('auth_role_id', String(userData.role_id));
-      setRoleId(Number(userData.role_id));
-    }
-    if (userData.role_name) {
-      localStorage.setItem('auth_role_name', userData.role_name);
-      setRoleName(userData.role_name);
-    }
-    if (userData.email) {
-      localStorage.setItem('auth_user_email', userData.email);
-      setUserEmail(userData.email);
-    }
+    const items = {
+      ...(accessToken && { access_token: accessToken }),
+      ...(refreshToken && { refresh_token: refreshToken }),
+      ...(userData.role_id && { auth_role_id: String(userData.role_id) }),
+      ...(userData.role_name && { auth_role_name: userData.role_name }),
+      ...(userData.email && { auth_user_email: userData.email }),
+    };
+    Object.entries(items).forEach(([k, v]) => localStorage.setItem(k, v));
+    if (accessToken) setToken(accessToken);
+    if (userData.role_id) setRoleId(Number(userData.role_id));
+    if (userData.role_name) setRoleName(userData.role_name);
+    if (userData.email) setUserEmail(userData.email);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('auth_role_id');
-    localStorage.removeItem('auth_role_name');
-    localStorage.removeItem('auth_user_email');
+    ['access_token', 'refresh_token', 'auth_role_id', 'auth_role_name', 'auth_user_email'].forEach((k) =>
+      localStorage.removeItem(k)
+    );
     setToken(null);
     setRoleId(null);
     setRoleName('Unauthenticated');
