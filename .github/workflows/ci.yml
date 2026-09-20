@@ -10,6 +10,9 @@ jobs:
   backend-test-and-security-gate:
     name: Backend Tests & Security Attack Lab Gate (REQ-SECLAB-01)
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+      ENVIRONMENT: local
     defaults:
       run:
         working-directory: backend
@@ -23,12 +26,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install Backend Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest-cov
 
       - name: Seed Database Test Fixtures
         run: |
@@ -44,7 +47,7 @@ jobs:
           pytest tests/integration/test_lab_api.py::test_security_attack_run_api -v
 
   frontend-build:
-    name: Frontend Build & Asset Compilation
+    name: Frontend Build & Test Verification
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -65,6 +68,11 @@ jobs:
         run: |
           npm ci
 
+      - name: Run Frontend Tests
+        run: |
+          npm test
+
       - name: Verify Production Build
         run: |
           npm run build
+
