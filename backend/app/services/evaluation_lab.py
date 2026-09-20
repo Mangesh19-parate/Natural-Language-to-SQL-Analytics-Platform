@@ -734,7 +734,10 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             exec_succ = sum(1 for it in v_items if it.execution_success)
             safety_viols = sum(1 for it in v_items if it.safety_violation)
             unauth_exposures = sum(1 for it in v_items if it.unauthorized_exposure)
-            avg_lat = int(sum(it.latency_ms for it in v_items) / max(n_items, 1))
+            latencies = sorted(it.latency_ms for it in v_items)
+            avg_lat = int(sum(latencies) / max(n_items, 1))
+            p50_lat = latencies[len(latencies) // 2] if latencies else 0
+            p95_lat = latencies[int(len(latencies) * 0.95)] if latencies else 0
 
             variant_stats[var.value] = {
                 "semantic_answer_accuracy_ci": compute_wilson_ci(gt_correct, len(gt_items)),
@@ -744,6 +747,8 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                 "safety_violation_rate": round((safety_viols / max(n_items, 1)) * 100.0, 2),
                 "unauthorized_exposure_rate": round((unauth_exposures / max(n_items, 1)) * 100.0, 2),
                 "avg_latency_ms": avg_lat,
+                "p50_latency_ms": p50_lat,
+                "p95_latency_ms": p95_lat,
             }
 
         d_items_overall = [r for r in results if r.baseline_variant in [BaselineVariantType.D_PROPOSED, BaselineVariantType.D_POLICY_ENGINE, BaselineVariantType.G_FULL_TRUST_ENGINE]]
