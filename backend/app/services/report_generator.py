@@ -26,10 +26,6 @@ from app.schemas.report import ReportExportRequest, ReportQueryItem
 from app.services.storage_service import StorageService
 
 
-REPORTS_DIR = os.path.join(os.getcwd(), "local_data", "reports")
-os.makedirs(REPORTS_DIR, exist_ok=True)
-
-
 # Shared Report Styling & Palette Constants
 COLOR_PRIMARY = colors.HexColor("#1e293b")
 COLOR_ACCENT = colors.HexColor("#2563eb")
@@ -64,8 +60,8 @@ class ReportGeneratorService:
     """
 
     def __init__(self, reports_dir: Optional[str] = None):
-        self.reports_dir = reports_dir or REPORTS_DIR
         self.storage = StorageService()
+        self.reports_dir = reports_dir or self.storage.local_dir
         os.makedirs(self.reports_dir, exist_ok=True)
 
     def generate_pdf(self, request: ReportExportRequest, user_id: int = 1) -> Tuple[str, str, str]:
