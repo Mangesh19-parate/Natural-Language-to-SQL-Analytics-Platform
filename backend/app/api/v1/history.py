@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.db.session import get_db, business_engine
+from app.db.session import get_db
 from app.models.session import QueryHistory, SessionModel
 from app.models.auth import User
 from app.models.trust import SqlCriticFinding, ResultValidation

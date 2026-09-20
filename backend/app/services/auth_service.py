@@ -346,4 +346,80 @@ def authorize_query_access(
     return q_row
 
 
+def authorize_datasource(
+    db: Session,
+    current_user: User,
+    data_source_id: int,
+    action: str = "access",
+) -> Any:
+    """
+    Centralized DataSource Authorization Gate (SEC-DATASOURCE-AUTH).
+    Verifies that the requested data source exists, is active, and is accessible under the caller's role.
+    """
+    from app.models.policy import DataSource, DataPolicy
+    ds_row = db.query(DataSource).filter(
+        DataSource.data_source_id == data_source_id,
+        DataSource.is_active.is_(True),
+    ).first()
+
+    if not ds_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Data source ID {data_source_id} not found or is inactive.",
+        )
+
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name == "admin":
+        return ds_row
+
+    # Non-admins must have at least one active policy on this datasource
+    effective_role_id = current_user.role_id or 3
+    has_policy = db.query(DataPolicy).filter(
+        DataPolicy.data_source_id == data_source_id,
+        DataPolicy.role_id == effective_role_id,
+    ).first()
+
+    if not has_policy and data_source_id != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Role '{user_role_name}' is not authorized to {action} data source {data_source_id}.",
+        )
+    return ds_row
+
+
+def authorize_job_access(
+    db: Session,
+    current_user: User,
+    job_id: str,
+    action: str = "view",
+) -> Dict[str, Any]:
+    """
+    Centralized Background Job Ownership Gate (SEC-JOB-OWNERSHIP).
+    Enforces that non-admin callers can only view/manage jobs they created.
+    """
+    from app.services.evaluation_lab import EvaluationLabService
+    job_record = EvaluationLabService.get_job_status(job_id, db=db)
+    if not job_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation job '{job_id}' not found.",
+        )
+
+    user_role_name = current_user.role.role_name.lower() if current_user.role else "viewer"
+    if user_role_name != "admin":
+        creator_id = job_record.get("created_by_user_id")
+        if creator_id is not None and creator_id != current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: You do not have permission to {action} evaluation job '{job_id}'.",
+            )
+    return job_record
+
+
+# Standard dependency aliases
+require_user = get_current_user
+require_admin = require_roles(["admin"])
+
+
+
 

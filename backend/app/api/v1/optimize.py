@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import Engine
 
-from app.db.session import get_db, get_business_db, business_engine
+from app.db.session import get_db
 from app.models.trust import OptimizationSuggestion
 from app.models.auth import User
 from app.models.session import QueryHistory

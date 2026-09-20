@@ -1,77 +1,90 @@
-# Threat Model (STRIDE Framework)
+# TrustSQL / Intelligent SQL Assistant — Threat Model & Security Architecture
 
-This document details the security threat model for the **Intelligent SQL Assistant (Trust Engine)** platform following Microsoft's STRIDE methodology.
-
----
-
-## 🛡 System Security Boundaries
-
-```
-[ Untrusted Client / Browser ]
-             │ (HTTP / TLS)
-             ▼
-═════════════════════════════════════════════════════════════════════════════════
- TRUST BOUNDARY 1: Edge & Network Security
- - Distributed Rate Limiter (Redis Sliding Window, 120 req/min)
- - JWT Bearer Authentication & Fail-Closed Revocation Lookup
- - Server-Side Role Enforcement (Client role spoofing blocked)
-═════════════════════════════════════════════════════════════════════════════════
-             │
-             ▼
-[ FastAPI Stateless Application Tier ]
-             │
-             ▼
-═════════════════════════════════════════════════════════════════════════════════
- TRUST BOUNDARY 2: AI / LLM Generation Isolation
- - Model output is treated as UNTRUSTED CANDIDATE DATA.
- - LLM has ZERO execution or authorization authority (Principle Rule 0).
-═════════════════════════════════════════════════════════════════════════════════
-             │
-             ▼
-[ Deterministic AST & Policy Enforcement Engine ]
- - SQLglot Abstract Syntax Tree (AST) validation.
- - Reject 100% of non-SELECT statements (INSERT/UPDATE/DELETE/DROP/ALTER).
- - Table & Column RBAC validation.
- - Forced AST Row-Filter Injection (Tenant / Department boundaries).
- - Disallowed dangerous functions block (`pg_read_file`, `system`, `copy`).
- - Disconnected Cartesian product block.
-═════════════════════════════════════════════════════════════════════════════════
-             │
-             ▼
-═════════════════════════════════════════════════════════════════════════════════
- TRUST BOUNDARY 3: Execution Sandbox & Database Isolation
- - Dedicated read-only database credentials.
- - Hard statement timeouts (default 10s, max 30s).
- - Hard row result cap (default 1,000, max 10,000).
- - Result validation & anomaly detection (Zero-row, NULL explosion, Cardinality outlier).
-═════════════════════════════════════════════════════════════════════════════════
-             │
-             ▼
-[ Read-Only Business Data Warehouse ]
-```
+This document formalizes the assets, actors, trust boundaries, threat scenarios, and deterministic security mitigations implemented in TrustSQL (Principle R0 & Rule R1.1–R1.6).
 
 ---
 
-## 🔍 STRIDE Threat Analysis Matrix
+## 1. System Assets
 
-| Threat Category | Threat Description | Attack Vector / Scenario | Platform Mitigation & Security Control | Verification Test |
+| Asset ID | Asset Name | Description | Sensitivity |
+| :--- | :--- | :--- | :--- |
+| **A1** | **Customer / Business Data** | Relational tables in underlying business data sources | High (Restricted by Role) |
+| **A2** | **Semantic Schema & Catalog** | Metadata describing table/column semantics, types, descriptions | Internal / Governed |
+| **A3** | **Security & Access Policies** | Table, column, row filter, and aggregate permissions | Critical (Integrity-Sensitive) |
+| **A4** | **Execution Provenance & Replay** | Query history, AST hashes, schema snapshots, result SHA-256 | Internal (Audit Trail) |
+| **A5** | **Authentication Credentials** | JWT signing keys, user password hashes, database connection secrets | Critical (Confidential) |
+
+---
+
+## 2. Actors & Roles
+
+| Actor | Role ID | Capabilities & Trust Level |
+| :--- | :--- | :--- |
+| **Admin** | `1` | Full administrative, governance, attack simulation, benchmark execution, policy configuration. |
+| **Analyst** | `2` | Natural language to SQL query generation, ad-hoc execution against authorized tables/columns. |
+| **Viewer** | `3` | Read-only access to pre-approved aggregated views and self-owned query history. |
+| **Untrusted LLM** | N/A | External generative AI provider. **Zero trust**: output is treated as unvalidated candidate text. |
+| **Anonymous Caller** | N/A | Unauthenticated internet actor. Restricted exclusively to `/api/auth/login`, `/api/auth/refresh`, `/api/health`. |
+
+---
+
+## 3. Trust Boundaries & Invariants
+
+```text
+               [ Untrusted Internet Client ]
+                             │  (HTTP / Bearer JWT)
+   ══════════════════════════╪═════════════════════════════════════  [Trust Boundary 1: API Ingress]
+                             ▼
+                    [ FastAPI Auth Middleware ]
+                      - JWT Signature & Expiry
+                      - Revocation Cache / DB Gate
+                      - Effective Role Resolution (Server-Side)
+                             │
+   ══════════════════════════╪═════════════════════════════════════  [Trust Boundary 2: Generator & LLM]
+                             ▼
+                    [ SQL Generator Service ]
+                      - Authorized Catalog Injection Only
+                      - Prompt Hardening & Anti-Injection
+                      - Raw SQL Candidate Output
+                             │
+   ══════════════════════════╪═════════════════════════════════════  [Trust Boundary 3: Deterministic Policy]
+                             ▼
+                    [ Policy Engine & AST Parser ]
+                      - SELECT-Only Statement Whitelist
+                      - Table & Column Allowlist Verification
+                      - High Sensitivity Column Blocking
+                      - Deterministic Row Filter Injection (RLS)
+                      - SQL Critic Smell Analysis
+                             │
+   ══════════════════════════╪═════════════════════════════════════  [Trust Boundary 4: Database Execution]
+                             ▼
+                    [ Read-Only Sandbox Pool ]
+                      - Least Privilege DB Credentials (business_readonly)
+                      - Strict Statement Timeout (5–10s)
+                      - Hard Result Row Cap (10,000 rows)
+                      - Isolated Multi-Tenant DataSource Routing
+```
+
+---
+
+## 4. Threat Matrix & Mitigations (STRIDE Analysis)
+
+| Threat ID | Category | Threat Scenario | Mitigation / Control | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Spoofing (S)** | Client claims a higher privilege role (e.g. `role_id=1` admin) in JSON payload while logged in as viewer. | Attacker tampers with request body `role_id` to access executive salary data. | **`get_effective_role_id()`**: Server-side role extraction strictly derives role from cryptographically verified JWT claims, ignoring client payload overrides. | `test_client_cannot_spoof_role_id_to_bypass_policy` |
-| **Spoofing (S)** | Replay of stolen or logged-out JWT tokens. | Attacker uses a leaked token after the legitimate user called `/logout`. | **Distributed Token Revocation**: Revokes JTI & token hash in Redis and persistent `RevokedToken` DB table. Fail-closed verification on every request. | `test_concurrent_token_revocation_under_load` |
-| **Tampering (T)** | SQL Injection via natural language prompt. | Attacker submits: *"Show sales; DROP TABLE employees; --"* | **Deterministic AST Parsing**: Rejects multiple statements (`MULTIPLE_STATEMENTS`), validates statement type is strictly `SELECT`, rejects DDL/DML. | `test_reject_100_percent_non_select_statements` |
-| **Tampering (T)** | Row filter bypass via alias or CTE rewriting. | Attacker writes CTE to query all departments without tenant filter. | **AST Row Filter Injection**: Injects mandatory WHERE predicates directly into table expressions within the AST hierarchy before SQL serialization. | `test_ast_row_filter_injection_with_existing_where` |
-| **Repudiation (R)** | User denies executing an expensive or sensitive query. | Compliance audit requires proof of which user ran an analytics query. | **Query History & Replay**: Stores `user_id`, prompt version, schema snapshot ID, final executed SQL, execution latency, and SHA-256 result set hash. | `test_query_replay_exact_reproducibility` |
-| **Information Disclosure (I)** | Unauthorized column access (e.g. `salary`, `ssn`, `password_hash`). | User asks for *"employee compensation"* or uses wildcard `SELECT *`. | **Column-Level Policy Engine & Deny Lists**: Validates every column in AST against role policy. Blocks unauthorized columns and masks sensitive fields. | `test_column_deny`, `test_high_sensitivity_column_no_policy_denied` |
-| **Information Disclosure (I)** | Direct File System or OS Access via SQL functions. | Attacker queries `pg_read_file('/etc/passwd')` or SQLite `load_extension()`. | **Disallowed Function AST Gate**: Rejects any AST node containing dangerous database built-ins. | `test_dangerous_functions_blocked` |
-| **Denial of Service (D)** | Runaway Cartesian product or unindexed joins exhausting database memory. | Attacker crafts a 6-table join without join predicates (`FROM a, b, c, d`). | **Cost-Based Join Optimizer & Cartesian Gate**: Pre-execution graph traversal detects disconnected components and returns `BLOCK_RUNAWAY_CARTESIAN`. | `test_cartesian_product_block_gate` |
-| **Denial of Service (D)** | High-concurrency API flooding / event-loop starvation. | Attacker sends 500 parallel heavy optimization requests. | **Distributed Rate Limiting & Threadpool Isolation**: 120 req/min sliding-window limiter; synchronous endpoints execute in `anyio.to_thread` worker pool. | `test_concurrent_sql_validation_burst_100` |
-| **Elevation of Privilege (E)** | Non-admin user accessing `EXPLAIN ANALYZE` execution mode. | Viewer calls `POST /api/optimize/analyze`. | **`require_roles(["admin"])`**: Strictly checks server-side role and raises HTTP 403 Forbidden. | `test_non_admin_cannot_access_explain_analyze` |
+| **T01** | **Spoofing** | Client sends tampered JWT or claims simulated role in request body. | Server-side role resolution (`get_effective_role_id`). Non-admins cannot elevate or simulate roles. | **ENFORCED** |
+| **T02** | **Tampering** | LLM generates `DROP`, `INSERT`, `UPDATE`, `ALTER`, or `EXEC`. | AST parser enforces strict single-statement `SELECT` grammar. All DDL/DML rejected before sandbox. | **ENFORCED** |
+| **T03** | **Information Disclosure** | User queries a table or column restricted for their role or high sensitivity. | Fail-closed `DataPolicy` check. Unauthorized table/column references blocked deterministically. | **ENFORCED** |
+| **T04** | **Elevation of Privilege** | Replay or execution executes against a different, higher-privilege datasource. | Strict `data_source_id` binding on `QueryHistory`, `DataSourceManager` isolation, no global fallback. | **ENFORCED** |
+| **T05** | **Denial of Service** | Runaway Cartesian product or expensive nested subqueries. | Optimizer admission gate (`BLOCK_RUNAWAY_CARTESIAN`), statement timeout, sandbox row caps. | **ENFORCED** |
+| **T06** | **Information Disclosure (IDOR)** | User accesses or reruns another user's historical queries or evaluation jobs. | `authorize_query_access` & `authorize_job_access` enforce resource owner verification. | **ENFORCED** |
+| **T07** | **Repudiation** | Query results diverge or cannot be audited against schema state. | Immutable `schema_snapshot`, prompt versions, model parameters, and SHA-256 result fingerprints. | **ENFORCED** |
+| **T08** | **Bypass of Row Security** | Query omits tenant/department filter. | Policy Engine injects deterministic SQL AST `WHERE` predicates into AST before sandbox dispatch. | **ENFORCED** |
 
 ---
 
-## 🔒 Fail-Closed Security Invariant
+## 5. Security Invariant Assertions
 
-The core security thesis of the system is:
-$$\text{Safety}(\text{Query}) = \text{PolicyEngine}(\text{AST}(\text{SQL})) \land \text{ExecutionSandbox}(\text{SQL}_{\text{injected}})$$
-
-If any security component (token validation, AST parser, policy database lookup, role authorization) encounters an unexpected state or exception, the system **fails closed**: the request is immediately rejected with HTTP 401/403/400 and query execution is aborted.
+1. **Universal Guardrail Invariance**: Every SQL query executed against any database MUST pass deterministic Policy Engine validation.
+2. **Fail-Closed Isolation**: If a datasource, token revocation cache, or policy record is missing or unreachable, the system denies access by default.
+3. **No LLM in Security Path**: Authorization decisions are computed 100% deterministically in Python/AST, never delegated to an LLM evaluator.
+4. **Least-Privilege Database Sandbox**: Runtime application connections to business databases use dedicated read-only credentials (`business_readonly`), making data-modifying exploits physically impossible at the DBMS level.

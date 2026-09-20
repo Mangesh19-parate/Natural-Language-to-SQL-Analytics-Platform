@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.db.session import get_db, business_engine
+from app.db.session import get_db
 from app.models.session import QueryHistory
 from app.models.auth import User
 from app.schemas.query import (
