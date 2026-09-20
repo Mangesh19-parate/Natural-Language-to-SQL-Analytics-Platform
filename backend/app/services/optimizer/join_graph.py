@@ -34,22 +34,22 @@ class JoinGraph:
                 self.unsupported_reason = "UNPARSEABLE_SQL"
                 return
 
-        # 1. Non-Select statements rejection
+        # 1. Set operations rejection (UNION, INTERSECT, EXCEPT)
+        if isinstance(parsed, (exp.Union, exp.Intersect, exp.Except)) or parsed.find((exp.Union, exp.Intersect, exp.Except)):
+            self.is_shape_supported = False
+            self.unsupported_reason = "SET_OPERATION_PRESENT"
+            return
+
+        # 2. Non-Select statements rejection
         if not isinstance(parsed, exp.Select):
             self.is_shape_supported = False
             self.unsupported_reason = "NON_SELECT_STATEMENT"
             return
 
-        # 2. CTEs rejection
-        if parsed.find(exp.With) or parsed.find(exp.CTE) or parsed.args.get("with"):
+        # 3. CTEs rejection
+        if parsed.find(exp.With) or parsed.find(exp.CTE) or (hasattr(parsed, "args") and parsed.args.get("with")):
             self.is_shape_supported = False
             self.unsupported_reason = "CTE_EXPRESSION_PRESENT"
-            return
-
-        # 3. Set operations rejection (UNION, INTERSECT, EXCEPT)
-        if isinstance(parsed, (exp.Union, exp.Intersect, exp.Except)) or parsed.find((exp.Union, exp.Intersect, exp.Except)):
-            self.is_shape_supported = False
-            self.unsupported_reason = "SET_OPERATION_PRESENT"
             return
 
         # 4. Nested subqueries rejection
@@ -58,11 +58,24 @@ class JoinGraph:
             self.unsupported_reason = "NESTED_SUBQUERY_PRESENT"
             return
 
-        # 5. Volatile or lateral functions check
-        for func in parsed.find_all(exp.Anonymous):
-            if func.name.upper() in ["RANDOM", "RAND", "NOW", "CLOCK_TIMESTAMP", "GEN_RANDOM_UUID"]:
+        # 5. Window functions rejection
+        if parsed.find(exp.Window) or parsed.find(exp.WindowSpec):
+            self.is_shape_supported = False
+            self.unsupported_reason = "WINDOW_FUNCTION_PRESENT"
+            return
+
+        # 6. Volatile or non-deterministic functions check
+        if parsed.find(exp.Rand):
+            self.is_shape_supported = False
+            self.unsupported_reason = "VOLATILE_FUNCTION_RANDOM"
+            return
+
+        volatile_names = {"RANDOM", "RAND", "NOW", "CLOCK_TIMESTAMP", "GEN_RANDOM_UUID", "CURRENT_TIMESTAMP"}
+        for func in parsed.find_all((exp.Anonymous, exp.Func)):
+            name = (getattr(func, "name", None) or getattr(func, "key", None) or type(func).__name__).upper()
+            if name in volatile_names:
                 self.is_shape_supported = False
-                self.unsupported_reason = f"VOLATILE_FUNCTION_{func.name.upper()}"
+                self.unsupported_reason = f"VOLATILE_FUNCTION_{name}"
                 return
 
         # 6. Outer join detection & shape rejection
