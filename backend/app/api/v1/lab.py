@@ -133,6 +133,58 @@ def get_evaluation_job_status(
     )
 
 
+@router.post(
+    "/evaluation/jobs/{job_id}/cancel",
+    response_model=EvaluationJobStatusResponse,
+    summary="Cancel Async Benchmark Evaluation Job",
+)
+def cancel_evaluation_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Cancels a pending or running benchmark evaluation job.
+    Enforces IDOR ownership protection (owner or admin only).
+    """
+    job_record = EvaluationLabService.get_job_status(job_id, db=db)
+    if not job_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation job '{job_id}' not found.",
+        )
+
+    # IDOR Access Control: Admins or Job Creator only
+    user_role_name = getattr(current_user.role, "role_name", "") if current_user.role else ""
+    if not user_role_name and current_user.role_id and db:
+        from app.models.auth import Role
+        r = db.query(Role).filter(Role.role_id == current_user.role_id).first()
+        if r:
+            user_role_name = r.role_name
+
+    is_admin = user_role_name.lower() == "admin"
+    job_creator_id = job_record.get("created_by_user_id")
+    if not is_admin and job_creator_id is not None and job_creator_id != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to cancel this benchmark job.",
+        )
+
+    EvaluationLabService.cancel_job(job_id, db=db)
+    updated_record = EvaluationLabService.get_job_status(job_id, db=db)
+
+    return EvaluationJobStatusResponse(
+        job_id=updated_record["job_id"],
+        created_by_user_id=updated_record.get("created_by_user_id"),
+        status=updated_record["status"],
+        progress_pct=updated_record.get("progress_pct", 0.0),
+        error=updated_record.get("error"),
+        result=updated_record.get("result"),
+        created_at=updated_record["created_at"],
+        completed_at=updated_record.get("completed_at"),
+    )
+
+
 @router.post("/evaluation/run", response_model=EvaluationBenchmarkResponse)
 async def run_evaluation_benchmark(
     request: EvaluationBenchmarkRequest,

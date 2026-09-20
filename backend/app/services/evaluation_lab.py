@@ -984,6 +984,8 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                 # Update DB to running
                 db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
                 if db_job:
+                    if db_job.status == "cancelled":
+                        return
                     db_job.status = "running"
                     db_job.progress_pct = 15.0
                     db.commit()
@@ -1008,6 +1010,8 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                 # Update DB to completed
                 db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
                 if db_job:
+                    if db_job.status == "cancelled":
+                        return
                     db_job.status = "completed"
                     db_job.progress_pct = 100.0
                     db_job.result_json = result_json
@@ -1015,7 +1019,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     db.commit()
 
                 with cls._job_lock:
-                    if job_id in cls._jobs:
+                    if job_id in cls._jobs and cls._jobs[job_id]["status"] != "cancelled":
                         cls._jobs[job_id]["status"] = "completed"
                         cls._jobs[job_id]["progress_pct"] = 100.0
                         cls._jobs[job_id]["result"] = res
@@ -1027,7 +1031,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
 
                 try:
                     db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
-                    if db_job:
+                    if db_job and db_job.status != "cancelled":
                         db_job.status = "failed"
                         db_job.error = err_msg
                         db_job.completed_at = completed_dt
@@ -1036,7 +1040,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     db.rollback()
 
                 with cls._job_lock:
-                    if job_id in cls._jobs:
+                    if job_id in cls._jobs and cls._jobs[job_id]["status"] != "cancelled":
                         cls._jobs[job_id]["status"] = "failed"
                         cls._jobs[job_id]["error"] = err_msg
                         cls._jobs[job_id]["completed_at"] = completed_str
@@ -1045,6 +1049,26 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
 
         threading.Thread(target=_worker, daemon=True).start()
         return job_id
+
+    @classmethod
+    def cancel_job(cls, job_id: str, db: Session) -> bool:
+        """Cancels a pending or running evaluation job."""
+        now_dt = datetime.now(timezone.utc)
+        with cls._job_lock:
+            if job_id in cls._jobs:
+                cls._jobs[job_id]["status"] = "cancelled"
+                cls._jobs[job_id]["completed_at"] = now_dt.isoformat()
+
+        try:
+            db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
+            if db_job and db_job.status in ["pending", "running"]:
+                db_job.status = "cancelled"
+                db_job.completed_at = now_dt
+                db.commit()
+                return True
+        except Exception:
+            db.rollback()
+        return False
 
     @classmethod
     def get_job_status(cls, job_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
