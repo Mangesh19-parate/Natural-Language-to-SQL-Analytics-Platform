@@ -198,12 +198,14 @@ class RedisService:
             logger.error(f"Error caching catalog: {e}")
 
     def invalidate_catalog_cache(self, data_source_id: int):
-        """Invalidates all cached catalogs for a data source upon policy or schema change."""
+        """Invalidates all cached catalogs for a data source using non-blocking SCAN iteration."""
         if not self.is_available or self._client is None:
             return
         try:
-            keys = self._client.keys(f"catalog:{data_source_id}:role:*")
-            if keys:
-                self._client.delete(*keys)
+            matched_keys = []
+            for k in self._client.scan_iter(match=f"catalog:{data_source_id}:role:*", count=100):
+                matched_keys.append(k)
+            if matched_keys:
+                self._client.delete(*matched_keys)
         except Exception as e:
             logger.error(f"Error invalidating catalog cache: {e}")

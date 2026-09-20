@@ -10,10 +10,17 @@ export default function EvidenceChainPanel({
 }) {
   const isAllowed = policyValidation ? Boolean(policyValidation.is_allowed) : false;
   const executionSuccess = queryResult?.execution ? Boolean(queryResult.execution.success) : false;
-  const reliability = reliabilityScore ?? queryResult?.reliability?.overall_score ?? null;
+  const reliability = reliabilityScore ?? queryResult?.reliability?.composite_score ?? queryResult?.reliability?.overall_score ?? null;
 
+  // Single shared source of truth for confidence tiers (Rule R3.3 / Scorer alignment)
   const reliabilityVariant =
-    reliability === null ? 'neutral' : reliability >= 85 ? 'success' : reliability >= 60 ? 'warning' : 'danger';
+    reliability === null ? 'neutral' : reliability >= 80 ? 'success' : reliability >= 50 ? 'warning' : 'danger';
+  const confidenceLabel =
+    reliability === null ? 'Pending' : reliability >= 80 ? 'High Confidence' : reliability >= 50 ? 'Moderate' : 'Low Confidence';
+
+  const hasResultValidation = Boolean(resultValidation || queryResult?.result_validation);
+  const resultAnomaliesCount = resultValidation?.findings?.length ?? queryResult?.result_validation?.findings?.length ?? 0;
+  const hasAnomalies = resultValidation?.has_anomalies ?? queryResult?.result_validation?.has_anomalies ?? false;
 
   return (
     <div
@@ -58,7 +65,7 @@ export default function EvidenceChainPanel({
             </div>
           </div>
           <Badge variant={reliabilityVariant} size="md">
-            {reliability === null ? 'Pending' : reliability >= 85 ? 'High Confidence' : reliability >= 60 ? 'Moderate' : 'Low Confidence'}
+            {confidenceLabel}
           </Badge>
         </div>
       </div>
@@ -68,11 +75,15 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>1. Intent</span>
-            <span className="evidence-node-status passed">Verified</span>
+            <span className={`evidence-node-status ${queryResult ? 'passed' : 'pending'}`}>
+              {queryResult ? 'Verified' : 'Pending'}
+            </span>
           </div>
-          <div className="evidence-node-value">Direct Answerable</div>
+          <div className="evidence-node-value">
+            {queryResult?.intent?.classification || (queryResult ? 'Direct Answerable' : 'Awaiting Input')}
+          </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Zero metric ambiguity detected
+            {queryResult ? 'Intent classified & grounded' : 'Zero metric ambiguity check'}
           </div>
         </div>
 
@@ -80,7 +91,9 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>2. Schema</span>
-            <span className="evidence-node-status passed">Grounded</span>
+            <span className={`evidence-node-status ${queryResult ? 'passed' : 'pending'}`}>
+              {queryResult ? 'Grounded' : 'Pending'}
+            </span>
           </div>
           <div className="evidence-node-value">Semantic Catalog</div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -92,12 +105,12 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>3. Policy</span>
-            <span className={`evidence-node-status ${isAllowed ? 'passed' : 'failed'}`}>
-              {isAllowed ? 'Allowed' : 'Rejected'}
+            <span className={`evidence-node-status ${!policyValidation ? 'pending' : isAllowed ? 'passed' : 'failed'}`}>
+              {!policyValidation ? 'Pending' : isAllowed ? 'Allowed' : 'Rejected'}
             </span>
           </div>
           <div className="evidence-node-value">
-            {isAllowed ? 'RBAC & Limits OK' : 'Policy Blocked'}
+            {!policyValidation ? 'Awaiting Evaluation' : isAllowed ? 'RBAC & Limits OK' : 'Policy Blocked'}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
             {policyValidation?.applied_row_filter ? 'Row-filter injected' : 'Deny-by-default verified'}
@@ -108,7 +121,9 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>4. AST Syntax</span>
-            <span className="evidence-node-status passed">SELECT-Only</span>
+            <span className={`evidence-node-status ${queryResult?.sql ? 'passed' : 'pending'}`}>
+              {queryResult?.sql ? 'SELECT-Only' : 'Pending'}
+            </span>
           </div>
           <div className="evidence-node-value">SqlGlot Validated</div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -120,12 +135,12 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>5. SQL Critic</span>
-            <span className={`evidence-node-status ${criticAnalysis?.has_findings ? 'active' : 'passed'}`}>
-              {criticAnalysis?.has_findings ? 'Smells Flagged' : 'Clean'}
+            <span className={`evidence-node-status ${!criticAnalysis ? 'pending' : criticAnalysis.has_findings ? 'active' : 'passed'}`}>
+              {!criticAnalysis ? 'Pending' : criticAnalysis.has_findings ? 'Smells Flagged' : 'Clean'}
             </span>
           </div>
           <div className="evidence-node-value">
-            {criticAnalysis?.findings_count ?? 0} Findings
+            {criticAnalysis ? `${criticAnalysis.findings_count ?? criticAnalysis.findings?.length ?? 0} Findings` : 'Awaiting Analysis'}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
             Semantic logic verified
@@ -136,8 +151,8 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>6. Sandbox</span>
-            <span className={`evidence-node-status ${executionSuccess ? 'passed' : 'failed'}`}>
-              {executionSuccess ? 'Success' : 'Error'}
+            <span className={`evidence-node-status ${!queryResult?.execution ? 'pending' : executionSuccess ? 'passed' : 'failed'}`}>
+              {!queryResult?.execution ? 'Pending' : executionSuccess ? 'Success' : 'Error'}
             </span>
           </div>
           <div className="evidence-node-value">Read-Only Engine</div>
@@ -150,11 +165,15 @@ export default function EvidenceChainPanel({
         <div className="evidence-node">
           <div className="evidence-node-header">
             <span>7. Result Sanity</span>
-            <span className="evidence-node-status passed">Passed</span>
+            <span className={`evidence-node-status ${!hasResultValidation ? 'pending' : hasAnomalies ? 'failed' : 'passed'}`}>
+              {!hasResultValidation ? 'Pending' : hasAnomalies ? 'Flagged' : 'Passed'}
+            </span>
           </div>
-          <div className="evidence-node-value">Anomalies: None</div>
+          <div className="evidence-node-value">
+            {!hasResultValidation ? 'Awaiting Execution' : hasAnomalies ? `${resultAnomaliesCount} Anomaly Detected` : 'Anomalies: None'}
+          </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            0 NULL explosions / 0 Cartesian
+            Cardinality & null checks
           </div>
         </div>
       </div>

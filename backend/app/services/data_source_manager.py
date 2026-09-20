@@ -130,9 +130,27 @@ class DataSourceConnectionManager:
             return {"data_source_id": data_source_id, "status": "unhealthy", "error": str(e)}
 
     @classmethod
+    def dispose_engine(cls, data_source_id: int):
+        """Explicitly disposes the SQLAlchemy engine pool for a given data source to prevent leaks on rotation/disable."""
+        with cls._lock:
+            for registry in [cls._engine_registry, cls._admin_engine_registry]:
+                engine = registry.pop(data_source_id, None)
+                if engine is not None and data_source_id != 1:
+                    try:
+                        engine.dispose()
+                    except Exception as e:
+                        logger.warning(f"Error disposing engine for data_source_id={data_source_id}: {e}")
+
+    @classmethod
     def reset_registry(cls):
         """Clears cached dynamic engines for testing isolation."""
         with cls._lock:
+            for ds_id, eng in list(cls._engine_registry.items()):
+                if ds_id != 1:
+                    try:
+                        eng.dispose()
+                    except Exception:
+                        pass
             cls._engine_registry.clear()
             cls._admin_engine_registry.clear()
 

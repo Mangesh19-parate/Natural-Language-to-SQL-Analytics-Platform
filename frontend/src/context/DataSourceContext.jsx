@@ -4,11 +4,9 @@ import { apiFetch } from '../utils/api.js';
 const DataSourceContext = createContext(null);
 
 export function DataSourceProvider({ children }) {
-  const [dataSources, setDataSources] = useState([
-    { data_source_id: 1, name: 'PostgreSQL Primary', db_type: 'postgresql' }
-  ]);
-  const [selectedDataSourceId, setSelectedDataSourceId] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
+  const [dataSources, setDataSources] = useState([]);
+  const [selectedDataSourceId, setSelectedDataSourceId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const refreshDataSources = useCallback(async () => {
     setIsLoading(true);
@@ -17,9 +15,19 @@ export function DataSourceProvider({ children }) {
       const resData = await res.json();
       if (resData?.success && Array.isArray(resData.data) && resData.data.length > 0) {
         setDataSources(resData.data);
+        setSelectedDataSourceId((prev) => {
+          if (prev && resData.data.some((ds) => ds.data_source_id === prev)) {
+            return prev;
+          }
+          return resData.data[0].data_source_id;
+        });
+      } else {
+        setDataSources([]);
+        setSelectedDataSourceId(null);
       }
     } catch (err) {
-      // Fallback to default
+      setDataSources([]);
+      setSelectedDataSourceId(null);
     } finally {
       setIsLoading(false);
     }
@@ -29,7 +37,7 @@ export function DataSourceProvider({ children }) {
     refreshDataSources();
   }, [refreshDataSources]);
 
-  const selectedDataSource = dataSources.find((ds) => ds.data_source_id === selectedDataSourceId) || dataSources[0];
+  const selectedDataSource = dataSources.find((ds) => ds.data_source_id === selectedDataSourceId) || (dataSources.length > 0 ? dataSources[0] : null);
 
   const value = {
     dataSources,

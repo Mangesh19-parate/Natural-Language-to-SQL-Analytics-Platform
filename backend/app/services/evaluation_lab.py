@@ -358,7 +358,8 @@ class EvaluationLabService:
                     db=db, data_source_id=data_source_id, role_id=bq.role_id, business_engine=target_engine
                 )
                 intent = IntentAnalyzerService.classify_question(bq.question, catalog)
-                if intent.classification in ["unsupported", "unauthorized"] or bq.expected_behavior in ["UNSUPPORTED", "UNAUTHORIZED"]:
+                if intent.classification in ["unsupported", "unauthorized"]:
+                    is_correct_refusal = (bq.expected_behavior in ["UNSUPPORTED", "UNAUTHORIZED"])
                     latency = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
                     return EvaluationResultItem(
                         question_id=bq.question_id,
@@ -367,7 +368,7 @@ class EvaluationLabService:
                         baseline_variant=variant,
                         generated_sql=None,
                         execution_success=False,
-                        result_correct=True,  # Correctly refused unsupported/unauthorized request
+                        result_correct=is_correct_refusal,  # Verified refusal decision
                         safety_violation=False,
                         unauthorized_exposure=False,
                         error_type="E5",
@@ -956,8 +957,9 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
             )
             db_init.add(db_job)
             db_init.commit()
-        except Exception:
+        except Exception as exc:
             db_init.rollback()
+            raise RuntimeError(f"Failed to persist job to database: {exc}") from exc
         finally:
             db_init.close()
 
@@ -1072,12 +1074,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
 
     @classmethod
     def get_job_status(cls, job_id: str, db: Optional[Session] = None) -> Optional[Dict[str, Any]]:
-        """Retrieves current job status record from memory cache or persistent DB."""
-        with cls._job_lock:
-            cached = cls._jobs.get(job_id)
-            if cached:
-                return cached
-
+        """Retrieves current job status record with DB as authoritative source of truth."""
         if db:
             try:
                 db_job = db.query(EvaluationJob).filter(EvaluationJob.job_id == job_id).first()
@@ -1101,5 +1098,7 @@ CREATE TABLE sales (sale_id INT PRIMARY KEY, order_id INT, product_id INT, quant
                     }
             except Exception:
                 pass
-        return cached
+
+        with cls._job_lock:
+            return cls._jobs.get(job_id)
 
