@@ -19,7 +19,7 @@ router = APIRouter(prefix="/replay", tags=["Query Replay & Provenance"])
 @router.get("/{query_id}", response_model=StandardResponse[ProvenancePackage])
 def get_provenance_record(
     query_id: str,
-    data_source_id: int = Query(1, description="Data source ID"),
+    data_source_id: Optional[int] = Query(None, description="Data source ID (defaults to query's recorded data source)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -59,7 +59,7 @@ def get_provenance_record(
 def replay_query_endpoint(
     query_id: str,
     role_id: Optional[int] = Query(None, description="Role ID to replay under (Admin only)"),
-    data_source_id: int = Query(1, description="Data source ID"),
+    data_source_id: Optional[int] = Query(None, description="Data source ID (defaults to query's recorded data source)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

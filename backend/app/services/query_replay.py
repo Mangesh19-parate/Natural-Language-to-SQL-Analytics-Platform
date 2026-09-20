@@ -201,13 +201,15 @@ class QueryReplayService:
         )
 
     @staticmethod
-    def get_provenance_package(db: Session, query_id: str, data_source_id: int = 1) -> ProvenancePackage:
+    def get_provenance_package(db: Session, query_id: str, data_source_id: Optional[int] = None) -> ProvenancePackage:
         """
-        Gathers full reproducibility package for a query run.
+        Gathers full reproducibility package for a query run, strictly bound to the recorded data source.
         """
         query_row = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
         if not query_row:
             raise ValueError(f"Query record {query_id} not found")
+
+        resolved_ds_id = data_source_id if data_source_id is not None else (query_row.data_source_id or 1)
 
         # Fetch snapshot if exists
         snapshot = None
@@ -218,7 +220,7 @@ class QueryReplayService:
                 .first()
             )
 
-        current_schema = QueryReplayService.introspect_full_schema(db, data_source_id)
+        current_schema = QueryReplayService.introspect_full_schema(db, resolved_ds_id)
         drift_report = QueryReplayService.detect_schema_drift(
             historical_schema=snapshot.schema_json if snapshot else None,
             current_schema=current_schema,
@@ -263,14 +265,19 @@ class QueryReplayService:
         db: Session,
         query_id: str,
         role_id: int = 1,
-        data_source_id: int = 1,
+        data_source_id: Optional[int] = None,
         timeout_seconds: int = 10,
         max_rows: int = 1000,
     ) -> QueryReplayResponse:
         """
-        Performs a full replayed execution and verifies exact result reproducibility (REQ-REPLAY-01).
+        Performs a full replayed execution against the recorded data source and verifies exact result reproducibility (REQ-REPLAY-01).
         """
-        provenance = QueryReplayService.get_provenance_package(db, query_id, data_source_id)
+        query_row = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
+        if not query_row:
+            raise ValueError(f"Query record {query_id} not found")
+
+        resolved_ds_id = data_source_id if data_source_id is not None else (query_row.data_source_id or 1)
+        provenance = QueryReplayService.get_provenance_package(db, query_id, resolved_ds_id)
         sql_to_run = provenance.final_sql
         if not sql_to_run:
             raise ValueError(f"Query {query_id} has no executable SQL to replay")
@@ -279,7 +286,7 @@ class QueryReplayService:
         policy_res = PolicyEngine.validate_sql(
             db=db,
             role_id=role_id,
-            data_source_id=data_source_id,
+            data_source_id=resolved_ds_id,
             sql=sql_to_run,
         )
 
@@ -288,7 +295,7 @@ class QueryReplayService:
                 db=db,
                 sql=sql_to_run,
                 role_id=role_id,
-                data_source_id=data_source_id,
+                data_source_id=resolved_ds_id,
                 policy_validation=policy_res,
                 execution_success=False,
                 row_count=0,
@@ -318,11 +325,11 @@ class QueryReplayService:
         exec_sql = policy_res.injected_sql or sql_to_run
         critic_res = SQLCriticService.critique_sql(
             db=db,
-            data_source_id=data_source_id,
+            data_source_id=resolved_ds_id,
             sql=exec_sql,
         )
 
-        target_engine = DataSourceManager.get_engine(db=db, data_source_id=data_source_id)
+        target_engine = DataSourceManager.get_engine(db=db, data_source_id=resolved_ds_id)
         sandbox_res = ExecutionSandboxService.execute_query(
             engine=target_engine,
             sql=exec_sql,
@@ -343,7 +350,7 @@ class QueryReplayService:
                 db=db,
                 sql=exec_sql,
                 role_id=role_id,
-                data_source_id=data_source_id,
+                data_source_id=resolved_ds_id,
                 policy_validation=policy_res,
                 critic_analysis=critic_res,
                 result_validation=validation_report,
@@ -398,7 +405,7 @@ class QueryReplayService:
             db=db,
             sql=exec_sql,
             role_id=role_id,
-            data_source_id=data_source_id,
+            data_source_id=resolved_ds_id,
             policy_validation=policy_res,
             critic_analysis=critic_res,
             row_count=0,

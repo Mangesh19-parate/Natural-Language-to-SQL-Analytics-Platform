@@ -188,6 +188,7 @@ def _persist_query_reliability(
     try:
         q_row = db.query(QueryHistory).filter(QueryHistory.query_id == query_id).first()
         if q_row:
+            q_row.data_source_id = data_source_id
             q_row.reliability_breakdown = reliability_dict
             q_row.final_sql = final_sql
             q_row.status = status_str
@@ -264,7 +265,15 @@ def execute_sandboxed_sql(
             latency_ms=0,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), request.sql, "rejected_policy", 0, 0, user_id=current_user.user_id
+            db,
+            request.query_id,
+            reliability.model_dump(),
+            request.sql,
+            "rejected_policy",
+            0,
+            0,
+            data_source_id=request.data_source_id,
+            user_id=current_user.user_id,
         )
         return SQLExecuteResponse(
             success=False,
@@ -312,7 +321,15 @@ def execute_sandboxed_sql(
             latency_ms=0,
         )
         _persist_query_reliability(
-            db, request.query_id, reliability.model_dump(), execution_sql, "rejected_optimizer", 0, 0, user_id=current_user.user_id
+            db,
+            request.query_id,
+            reliability.model_dump(),
+            execution_sql,
+            "rejected_optimizer",
+            0,
+            0,
+            data_source_id=request.data_source_id,
+            user_id=current_user.user_id,
         )
         return SQLExecuteResponse(
             success=False,
@@ -440,7 +457,16 @@ def execute_sandboxed_sql(
                     question=request.question,
                 )
                 _persist_query_reliability(
-                    db, request.query_id, reliability.model_dump(), correction_res.final_sql, "auto_corrected", repaired_exec.row_count, repaired_exec.latency_ms, repaired_chart_spec.chart_type.value, user_id=current_user.user_id
+                    db,
+                    request.query_id,
+                    reliability.model_dump(),
+                    correction_res.final_sql,
+                    "auto_corrected",
+                    repaired_exec.row_count,
+                    repaired_exec.latency_ms,
+                    repaired_chart_spec.chart_type.value,
+                    data_source_id=request.data_source_id,
+                    user_id=current_user.user_id,
                 )
                 return SQLExecuteResponse(
                     success=True,
@@ -473,7 +499,15 @@ def execute_sandboxed_sql(
         execution_success=False,
     )
     _persist_query_reliability(
-        db, request.query_id, reliability.model_dump(), final_execution_sql, "failed", 0, sandbox_res.latency_ms, user_id=current_user.user_id
+        db,
+        request.query_id,
+        reliability.model_dump(),
+        final_execution_sql,
+        "failed",
+        0,
+        sandbox_res.latency_ms,
+        data_source_id=request.data_source_id,
+        user_id=current_user.user_id,
     )
     return SQLExecuteResponse(
         success=False,

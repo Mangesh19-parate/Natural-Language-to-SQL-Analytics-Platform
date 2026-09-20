@@ -27,6 +27,9 @@ async function doRefreshToken() {
   }
   localStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+  }
   return null;
 }
 

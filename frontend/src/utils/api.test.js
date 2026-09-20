@@ -67,7 +67,7 @@ test('apiFetch automatically refreshes on 401 and retries with new token', async
   assert.equal(localStorage.getItem('access_token'), 'brand_new_access_jwt');
 });
 
-test('concurrent 401s coalesce into a single refresh request without deadlock', async () => {
+test('5 simultaneous requests -> 5x401 -> ONE refresh -> 5 successful retries', async () => {
   localStorage.clear();
   localStorage.setItem('access_token', 'expired_token');
   localStorage.setItem('refresh_token', 'valid_refresh_token');
@@ -78,13 +78,12 @@ test('concurrent 401s coalesce into a single refresh request without deadlock', 
   globalThis.fetch = async (url, options = {}) => {
     if (url === '/api/auth/refresh') {
       refreshCallCount++;
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 15));
       return {
         status: 200,
         json: async () => ({
           success: true,
-          data: { access_token: 'coalesced_new_token' },
+          data: { access_token: 'coalesced_five_token' },
         }),
       };
     }
@@ -95,7 +94,7 @@ test('concurrent 401s coalesce into a single refresh request without deadlock', 
       if (authHeader === 'Bearer expired_token') {
         return { status: 401, json: async () => ({ error: 'Expired' }) };
       }
-      if (authHeader === 'Bearer coalesced_new_token') {
+      if (authHeader === 'Bearer coalesced_five_token') {
         return { status: 200, json: async () => ({ data: 'success' }) };
       }
     }
@@ -103,20 +102,51 @@ test('concurrent 401s coalesce into a single refresh request without deadlock', 
     return { status: 404, json: async () => ({}) };
   };
 
-  // Launch 3 simultaneous requests that all receive initial 401
-  const [res1, res2, res3] = await Promise.all([
+  const results = await Promise.all([
+    apiFetch('/api/resource'),
+    apiFetch('/api/resource'),
     apiFetch('/api/resource'),
     apiFetch('/api/resource'),
     apiFetch('/api/resource'),
   ]);
 
-  assert.equal(res1.status, 200);
-  assert.equal(res2.status, 200);
-  assert.equal(res3.status, 200);
+  for (const res of results) {
+    assert.equal(res.status, 200);
+  }
 
-  // Exactly 1 refresh should have occurred
   assert.equal(refreshCallCount, 1);
-  // 3 initial failing + 3 retried = 6 calls
-  assert.equal(protectedCallCount, 6);
-  assert.equal(localStorage.getItem('access_token'), 'coalesced_new_token');
+  assert.equal(protectedCallCount, 10);
+  assert.equal(localStorage.getItem('access_token'), 'coalesced_five_token');
 });
+
+test('refresh fails -> access and refresh tokens are purged immediately from storage', async () => {
+  localStorage.clear();
+  localStorage.setItem('access_token', 'expired_token');
+  localStorage.setItem('refresh_token', 'revoked_refresh_token');
+
+  let refreshCalled = false;
+
+  globalThis.fetch = async (url, options = {}) => {
+    if (url === '/api/auth/refresh') {
+      refreshCalled = true;
+      return {
+        status: 401,
+        json: async () => ({ success: false, detail: 'Invalid refresh token' }),
+      };
+    }
+
+    if (url === '/api/resource') {
+      return { status: 401, json: async () => ({ error: 'Unauthorized' }) };
+    }
+
+    return { status: 404, json: async () => ({}) };
+  };
+
+  const res = await apiFetch('/api/resource');
+
+  assert.equal(res.status, 401);
+  assert.equal(refreshCalled, true);
+  assert.equal(localStorage.getItem('access_token'), null);
+  assert.equal(localStorage.getItem('refresh_token'), null);
+});
+

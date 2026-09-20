@@ -57,7 +57,8 @@ class QueryHistory(Base):
     explanation = Column(Text, nullable=True)
     result_hash = Column(String(64), nullable=True)
     
-    # Reproducibility (Query Replay)
+    # Reproducibility (Query Replay) & Multi-Datasource Isolation
+    data_source_id = Column(Integer, ForeignKey("data_sources.data_source_id"), nullable=True, index=True)
     schema_snapshot_id = Column(String(36), ForeignKey("schema_snapshot.schema_snapshot_id"), nullable=True)
     prompt_version = Column(String(20), nullable=True)
     model_name = Column(String(100), nullable=True)
@@ -69,6 +70,7 @@ class QueryHistory(Base):
 
     session = relationship("SessionModel", back_populates="queries")
     user = relationship("User", back_populates="queries")
+    data_source = relationship("DataSource", backref="queries")
     schema_snapshot = relationship("SchemaSnapshot", back_populates="queries")
     
     critic_findings = relationship("SqlCriticFinding", back_populates="query", cascade="all, delete-orphan")
